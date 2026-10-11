@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: nivasbook
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: nivasbook-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: NIVASBOOK_DATA_DIR
+        value: /var/data
+      - key: NIVASBOOK_SESSION_SECRET
+        generateValue: true
+      - key: NIVASBOOK_OWNER_EMAIL
+        sync: false
+      - key: NIVASBOOK_OWNER_PASSWORD
+        sync: false
+      - key: NIVASBOOK_PLATFORM_EMAIL
+        sync: false
+      - key: NIVASBOOK_PLATFORM_PASSWORD
+        sync: false

@@ -1,0 +1,49 @@
+{
+  "name": "nivasbook-pg-manager",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "node dist-server/index.js",
+    "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:server\" \"npm:vite\"",
+    "build": "tsc -b && vite build && npm run build:server",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-server/index.js",
+    "test:commercial": "tsx --test server/commercial.test.ts",
+    "dev:desktop": "concurrently -k \"cross-env NIVASBOOK_DATA_DIR=data tsx watch server/index.ts\" \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:3000/api/health http://127.0.0.1:5173 && electron desktop/main.cjs --dev\"",
+    "desktop:pack": "npm run build && electron-builder --dir --win --x64 --config electron-builder.delete-data.yml",
+    "desktop:dist": "npm run build && electron-builder --win --x64 --config electron-builder.delete-data.yml",
+    "server": "tsx server/index.ts",
+    "vite": "vite",
+    "dev:local": "cross-env PORT=53821 npm run start"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "connect-sqlite3": "^0.9.18",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/connect-sqlite3": "^0.9.6",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^10.0.5",
+    "cross-env": "^7.0.3",
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.1",
+    "wait-on": "^8.0.3"
+  }
+}

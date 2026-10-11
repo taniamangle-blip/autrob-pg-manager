@@ -1,0 +1,24 @@
+/* Owner workspace network shortcuts and account menu */
+.topbar{position:relative;z-index:40;overflow:visible}
+.top-actions{gap:14px;min-width:0}
+.network-top-links{display:flex;align-items:center;gap:5px;margin-left:auto;margin-right:3px}
+.network-top-link{display:flex;align-items:center;gap:7px;min-height:34px;padding:0 9px;border:1px solid transparent;border-radius:8px;color:#65736f;text-decoration:none;font-size:11px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+.network-top-links button.network-top-link{background:transparent;font-family:inherit;cursor:pointer}
+.network-top-link:hover{background:#f3f8f5;border-color:#e5eee8;color:#287a68}
+.network-top-link svg{color:#498b77;flex:none}
+.network-top-link b{min-width:19px;height:19px;padding:0 5px;display:grid;place-items:center;border-radius:6px;background:#eef5f0;color:#3b8068;font-size:9px;line-height:1}
+.top-profile-wrap{position:relative;display:flex;align-items:center}
+.top-profile-trigger{display:flex;align-items:center;gap:8px;min-height:36px;padding:3px 7px;border:1px solid transparent;border-radius:9px;background:transparent;text-align:left}
+.top-profile-trigger:hover,.top-profile-trigger[aria-expanded=true]{background:#f6f8f7;border-color:#e9efec}
+.top-profile-trigger>svg{color:#8c9892}
+.top-profile-copy{display:grid;gap:2px;max-width:150px}
+.top-profile-copy strong{overflow:hidden;color:#46534e;font-size:10.5px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.top-profile-copy small{overflow:hidden;color:#98a29d;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.top-profile-menu{position:absolute;z-index:70;top:calc(100% + 8px);right:0;width:235px;padding:7px;border:1px solid #e7ece9;border-radius:11px;background:#fff;box-shadow:0 14px 35px #1d39251c}
+.top-profile-details{display:grid;gap:4px;padding:10px 10px 12px;border-bottom:1px solid #edf1ee}
+.top-profile-details strong{color:#34463d;font-size:12px}
+.top-profile-details span{overflow:hidden;color:#87938c;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.top-profile-logout{display:flex;align-items:center;gap:9px;width:100%;height:36px;margin-top:5px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:#a34d45;text-align:left;font-size:11px;font-weight:650}
+.top-profile-logout:hover{background:#fff3f1}
+@media(max-width:1000px){.network-top-links{gap:1px}.network-top-link{gap:5px;padding-inline:6px;font-size:10px}.top-actions{gap:8px}.top-profile-copy{max-width:112px}}
+@media(max-width:760px){.topbar{gap:4px}.breadcrumbs{min-width:0}.top-actions{gap:4px}.network-top-links{gap:0;margin-right:0}.network-top-link{position:relative;width:32px;min-width:32px;height:32px;justify-content:center;padding:0;gap:0}.network-top-link span{display:none}.network-top-link b{position:absolute;right:-2px;top:-2px;min-width:15px;height:15px;margin:0;padding:0 3px;font-size:8px}.top-profile-trigger{gap:3px;padding:2px}.top-profile-copy,.top-profile-trigger>svg{display:none}.top-profile-menu{right:-3px}}
