@@ -120,7 +120,8 @@ export function registerDesktopLicenseActivation(
       });
       applyLocal();
       return res.json({ ok: true, plan: result.plan, status: 'Active', expiresAt: result.expiresAt });
-    } catch {
+    } catch (error) {
+      console.error('Desktop remote license activation failed:', error);
       return res.status(502).json({ error: 'Could not reach the license server. Check your internet connection and try again.' });
     }
   });
