@@ -49,4 +49,9 @@ The first run creates `data/nivasbook.sqlite` and adds example properties, resid
 
 The Blueprint attaches a paid persistent disk at `/var/data` because SQLite stores owner accounts, business records, sessions, and license activations. Keep this as a single service instance: Render disks are single-instance, and data outside the mounted directory is ephemeral. `/api/health` is configured as the deploy health check. Back up the workspace database regularly; do not remove or replace the disk when updating the service. The service uses the Render-provided HTTPS endpoint; custom domain and DNS setup are optional.
 
+### Free Render license test (disposable)
+
+Use `render.free-test.yaml` as the Blueprint path to test a Windows activation key without adding a payment method. This separate Blueprint omits the persistent disk and uses `/tmp/nivasbook-data`; Render may erase its SQLite database when the free service spins down, restarts, or redeploys. Use test accounts and test licenses only. Do not enter real resident or owner data. Set the four owner/platform-admin secrets during Blueprint setup, then visit `/platform` to register a test owner and issue a license key. The desktop package forwards activation requests to `https://nivasbook-license-test.onrender.com`; only package a test build after that service is live. The free test API accepts high-entropy, single-use issued license keys and enforces the plan's device limit.
+
 Some parts of the owner interface remain previews: electricity reading allocation, maintenance tickets, staff, messaging, and reminders do not yet write to the database. Property room counts and bed capacities are stored, and room numbers and bed slots can be added, edited, and deleted from Rooms & beds. Manager accounts currently share workspace data permissions; fine-grained role permissions, external WhatsApp/email, and remote backups are not implemented.
+
