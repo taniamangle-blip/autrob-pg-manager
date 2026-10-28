@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type express from 'express';
 import type Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
 import { normalizePlanCode } from './commercial.js';
 
 type User = { id: string; email: string; organizationId: string };
@@ -32,15 +33,26 @@ export function registerDesktopLicenseActivation(
 
     const normalized = normalizeKey(req.body?.key);
     const deviceId = String(req.body?.deviceId || '');
+    const ownerLoginEmail = String(req.body?.ownerLoginEmail || '').trim().toLowerCase();
+    const ownerLoginPassword = String(req.body?.ownerLoginPassword || '');
     if (!/^NVB1[A-F0-9]{32}$/.test(normalized) || !/^[A-F0-9]{64}$/i.test(deviceId)) {
       return res.status(400).json({ error: 'Enter a valid activation key from the platform administrator.' });
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerLoginEmail) || ownerLoginPassword.length < 10 || ownerLoginPassword.length > 200) {
+      return res.status(400).json({ error: 'Enter the owner login email and password that were set when this license was issued.' });
+    }
     const license = db.prepare(`SELECT l.id,l.organization_id as organizationId,l.plan,l.plan_code as planCode,
       l.starts_at as startsAt,l.expires_at as expiresAt,l.status,l.key_hint as keyHint,
-      o.name as pgName,u.id as ownerId
+      l.owner_login_email as ownerLoginEmail,l.owner_login_password_hash as ownerLoginPasswordHash,
+      o.name as pgName,u.id as ownerId,u.email as registeredOwnerEmail,u.password_hash as registeredPasswordHash
       FROM saas_licenses l JOIN organizations o ON o.id=l.organization_id
       JOIN users u ON u.id=o.owner_user_id WHERE l.key_hash=?`).get(keyHash(normalized)) as any;
     if (!license) return res.status(404).json({ error: 'That activation key was not found.' });
+    const matchesRegisteredOwner = ownerLoginEmail === String(license.registeredOwnerEmail || '').toLowerCase() && bcrypt.compareSync(ownerLoginPassword, String(license.registeredPasswordHash || ''));
+    const matchesLegacyLicenseLogin = Boolean(license.ownerLoginPasswordHash) && ownerLoginEmail === String(license.ownerLoginEmail || '').toLowerCase() && bcrypt.compareSync(ownerLoginPassword, license.ownerLoginPasswordHash);
+    if (!matchesRegisteredOwner && !matchesLegacyLicenseLogin) {
+      return res.status(401).json({ error: 'Use the registered owner account email and password for this license.' });
+    }
     if (license.status === 'Revoked') return res.status(409).json({ error: 'This activation key has been revoked.' });
     const today = new Date().toISOString().slice(0, 10);
     if (license.startsAt > today || license.expiresAt < today || license.status === 'Expired') {
@@ -53,7 +65,7 @@ export function registerDesktopLicenseActivation(
     const activeCount = Number((db.prepare("SELECT COUNT(*) as count FROM license_device_activations WHERE license_id=? AND status='Active'").get(license.id) as any)?.count || 0);
     const planCode = normalizePlanCode(license.planCode || license.plan);
     const plan = db.prepare('SELECT max_devices as maxDevices FROM commercial_plans WHERE plan_code=?').get(planCode) as any;
-    const maxDevices = Math.max(1, Number(plan?.maxDevices || 1));
+    const maxDevices = 1; // Desktop licenses are limited to one active Windows PC.
     if (!existing && activeCount >= maxDevices) {
       return res.status(409).json({ error: `This license is already activated on its ${maxDevices} permitted device${maxDevices === 1 ? '' : 's'}. Ask the administrator to reset a device.` });
     }
@@ -64,6 +76,8 @@ export function registerDesktopLicenseActivation(
         .run(license.ownerId, activatedAt, license.id);
       db.prepare("UPDATE organizations SET plan=?,status='Active',trial_ends_at='',next_billing_at=? WHERE id=?")
         .run(license.plan, license.expiresAt, license.organizationId);
+      db.prepare("UPDATE commercial_trials SET trial_status='CONVERTED',converted_to_paid=1,updated_at=? WHERE business_id=? AND trial_status IN ('ACTIVE','EXPIRED')")
+        .run(activatedAt, license.organizationId);
       if (!existing) {
         db.prepare(`INSERT INTO license_device_activations
           (activation_id,license_id,business_id,device_id_hash,device_name,status,activated_at,last_validated_at)
@@ -75,7 +89,7 @@ export function registerDesktopLicenseActivation(
         .run(uid(), license.ownerId, existing ? 'desktop_license.revalidated' : 'desktop_license.activated', 'license', license.id, '{}', JSON.stringify({ deviceHash, planCode }), activatedAt);
     });
     activate();
-    res.json({ ok: true, plan: license.plan, expiresAt: license.expiresAt, pgName: license.pgName });
+    res.json({ ok: true, plan: license.plan, expiresAt: license.expiresAt, pgName: license.pgName, ownerLoginEmail: license.ownerLoginEmail });
   });
 
   app.post('/api/license/activate', licenseAuth, async (req, res, next) => {
@@ -91,7 +105,7 @@ export function registerDesktopLicenseActivation(
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key: req.body?.key, deviceId }),
+        body: JSON.stringify({ key: req.body?.key, deviceId, ownerLoginEmail: req.body?.ownerLoginEmail, ownerLoginPassword: req.body?.ownerLoginPassword }),
         signal: AbortSignal.timeout(15_000),
       });
       const result = await response.json().catch(() => ({})) as any;
@@ -115,6 +129,7 @@ export function registerDesktopLicenseActivation(
             );
         }
         db.prepare("UPDATE organizations SET plan=?,status='Active',trial_ends_at='',next_billing_at=? WHERE id=?").run(result.plan, result.expiresAt, user.organizationId);
+        db.prepare("UPDATE commercial_trials SET trial_status='CONVERTED',converted_to_paid=1,updated_at=? WHERE business_id=? AND trial_status IN ('ACTIVE','EXPIRED')").run(activatedAt, user.organizationId);
         db.prepare('INSERT INTO activities (id,organization_id,title,detail,kind,created_at) VALUES (?,?,?,?,?,?)').run(uid(), user.organizationId, 'Paid plan activated', result.plan + ' plan · valid until ' + result.expiresAt, 'license', activatedAt);
         db.prepare('INSERT INTO audit_log (id,organization_id,user_id,action,entity,entity_id,created_at) VALUES (?,?,?,?,?,?,?)').run(uid(), user.organizationId, user.id, 'license.activated.remotely', 'license', licenseId, activatedAt);
       });
@@ -126,4 +141,3 @@ export function registerDesktopLicenseActivation(
     }
   });
 }
-

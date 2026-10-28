@@ -146,6 +146,10 @@
 .reports-panel[data-report-panel="Income & Expenses"] .profit-numbers{font-size:16px;gap:24px}
 .reports-panel[data-report-panel="Profitability (By property)"] .profit-numbers small,
 .reports-panel[data-report-panel="Income & Expenses"] .profit-numbers small{font-size:10px;letter-spacing:.06em}
+.reports-view[data-report-view="Profitability (By property)"] .profit-numbers,
+.reports-panel[data-report-panel="Profitability (By property)"] .profit-numbers{font-size:20px;font-weight:700;line-height:1.35;gap:28px}
+.reports-view[data-report-view="Profitability (By property)"] .profit-numbers small,
+.reports-panel[data-report-panel="Profitability (By property)"] .profit-numbers small{display:block;margin-bottom:4px;font-size:11px}
 @media(max-width:700px){.reports-panel[data-report-panel="Profitability (By property)"] .profit-row,.reports-panel[data-report-panel="Income & Expenses"] .profit-row{align-items:flex-start;flex-direction:column;gap:12px}.reports-panel[data-report-panel="Profitability (By property)"] .profit-numbers,.reports-panel[data-report-panel="Income & Expenses"] .profit-numbers{width:100%;justify-content:space-between;gap:10px}}
 
 /* Keep bill actions clear in the resident electricity distribution table. */

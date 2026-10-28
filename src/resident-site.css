@@ -28,3 +28,49 @@
 .resident-info-page{min-height:62vh;padding-top:66px;padding-bottom:76px}.resident-info-page>h1{max-width:760px;margin:13px 0;font:850 clamp(34px,5vw,52px)/1.08 Manrope,sans-serif;letter-spacing:-2px}.resident-info-intro{max-width:720px;margin:0 0 30px;color:#6e7f73;font-size:14px;line-height:1.8}.resident-info-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:25px 0}.resident-info-sections article{padding:19px;border:1px solid var(--rs-line);border-radius:12px;background:#fff}.resident-info-sections h2{margin:0 0 8px;font:750 14px Manrope}.resident-info-sections p{margin:0;color:#718077;font-size:10px;line-height:1.75}.resident-info-page>.resident-primary{width:max-content;padding:0 15px}
 @media(max-width:1000px){.resident-hero-inner{width:70%}.resident-hero-image{width:31vw;height:270px;right:25px}.resident-search{grid-template-columns:1fr 1fr}.resident-search label:nth-child(3){border-left:0;border-top:1px solid #ffffff26}.resident-search button{grid-column:2;grid-row:2}.stay-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.resident-detail-grid{grid-template-columns:minmax(0,1fr) 320px}}
 @media(max-width:700px){.resident-header{height:auto;min-height:68px;padding:12px 16px;align-items:flex-start;flex-direction:column;gap:10px}.resident-header nav{width:100%;gap:16px;overflow-x:auto;padding:3px 0}.resident-header nav a{font-size:9px}.resident-header nav .resident-owner-link{margin-left:auto;padding:8px 10px}.resident-hero{min-height:0;padding:45px 17px 28px}.resident-hero-inner{width:100%}.resident-hero h1{font-size:47px;letter-spacing:-2.4px}.resident-hero-inner>p{font-size:11px}.resident-hero-image{display:none}.resident-search{grid-template-columns:1fr 1fr}.resident-search label{min-height:48px}.resident-search button{height:43px}.resident-benefits{margin:0 12px;padding:13px 9px;grid-template-columns:1fr;border:1px solid #edf1ed;border-radius:12px}.resident-benefits>div{padding:10px 5px}.resident-benefits>div+div{border-left:0;border-top:1px solid #edf1ed}.resident-wrap{padding-inline:16px}.resident-listings{padding-top:42px;padding-bottom:45px}.resident-section-heading{align-items:flex-start;flex-direction:column;gap:5px}.resident-section-heading h2,.resident-why h2,.resident-how h2{font-size:23px}.stay-grid{grid-template-columns:1fr;gap:12px}.stay-card-photo{height:200px}.resident-why{padding:39px 0}.resident-why-grid{grid-template-columns:1fr}.resident-why-grid article{padding:16px}.resident-how{grid-template-columns:1fr;gap:14px;padding-top:39px;padding-bottom:45px}.resident-how-steps{grid-template-columns:1fr}.resident-footer{padding:24px 16px;grid-template-columns:1fr 1fr;gap:20px}.resident-footer>div:first-child{grid-column:1/-1}.resident-detail{padding-top:18px}.resident-detail-grid{grid-template-columns:1fr}.resident-detail-cover{height:225px}.resident-detail-title{align-items:flex-start;flex-direction:column}.resident-detail-title h1{font-size:23px}.resident-book-panel{position:static}.resident-info-page{padding-top:42px;padding-bottom:48px}.resident-info-page>h1{font-size:35px}.resident-info-intro{font-size:12px}.resident-info-sections{grid-template-columns:1fr}}
+
+/* Resident booking pages: larger labels and supporting copy. */
+.resident-site{font-size:16px}
+.resident-brand{font-size:20px}
+.resident-brand small{font-size:9px}
+.resident-header nav a{font-size:13px}
+.resident-eyebrow{font-size:11px}
+.resident-hero-inner>p{font-size:16px;line-height:1.7}
+.resident-search label>span{font-size:11px}
+.resident-search input,.resident-search select{font-size:14px}
+.resident-search button{font-size:13px}
+.resident-search-note{font-size:11px}
+.resident-section-heading h2,.resident-why h2,.resident-how h2{font-size:31px}
+.resident-section-heading p,.resident-section-heading>span{font-size:14px}
+.stay-featured,.stay-gender{font-size:11px}
+.stay-location,.stay-card-content>p,.stay-quick-facts span{font-size:13px}
+.stay-card-title{font-size:20px}
+.stay-room-chips span{font-size:11px}
+.stay-card-bottom>span small{font-size:11px}
+.stay-card-bottom button,.resident-primary{font-size:13px;min-height:42px}
+.resident-benefits b{font-size:16px}
+.resident-benefits small,.resident-why-grid p,.resident-how-steps small{font-size:14px;line-height:1.6}
+.resident-why-grid h3,.resident-how-steps strong{font-size:17px}
+.resident-footer-brand{font-size:19px}
+.resident-footer p,.resident-footer strong,.resident-footer>div>a:not(.resident-footer-brand){font-size:12px}
+.resident-copyright{font-size:11px}
+.resident-info-page>h1{font-size:42px}
+.resident-info-intro,.resident-info-sections p{font-size:16px;line-height:1.7}
+.resident-info-sections h2{font-size:21px}
+@media(max-width:700px){
+ .resident-header nav a{font-size:12px}
+ .resident-hero-inner>p{font-size:15px}
+ .resident-section-heading h2,.resident-why h2,.resident-how h2{font-size:27px}
+ .stay-card-title{font-size:19px}
+ .resident-footer p,.resident-footer strong,.resident-footer>div>a:not(.resident-footer-brand){font-size:13px}
+}
+
+/* Bring the stay heading into the space previously occupied by the benefit cards. */
+.resident-listings{padding-top:32px}
+@media(max-width:700px){.resident-listings{padding-top:24px}}
+
+.resident-requirement-section{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(0,1.5fr);gap:28px;align-items:start;margin:50px auto;padding:30px;background:#fff;border:1px solid #e8efec;border-radius:20px;box-shadow:0 12px 36px #173c2a0a}.resident-requirement-intro h2,.resident-business-cta h2{font:700 28px/1.15 Manrope,sans-serif;margin:12px 0;color:#263b34}.resident-requirement-intro p,.resident-business-cta p{color:#71817a;line-height:1.65}.resident-requirement-form,.resident-business-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.resident-requirement-form label,.resident-business-form label{display:grid;gap:6px;color:#4a5c55;font-size:12px;font-weight:650}.resident-requirement-form input,.resident-requirement-form select,.resident-requirement-form textarea,.resident-business-form input,.resident-business-form textarea{width:100%;min-height:42px;padding:9px 11px;border:1px solid #dfe8e3;border-radius:9px;background:#fff;color:#253831}.resident-form-wide{grid-column:1/-1}.resident-requirement-success{padding:10px 12px;border-radius:9px;background:#edf7f0;color:#287357;font-size:13px}.resident-business-cta{display:flex;align-items:center;justify-content:space-between;gap:26px;margin:48px auto;padding:24px 28px;background:#f1f7f3;border-radius:18px}.resident-business-cta h2{margin:8px 0}.resident-business-cta p{margin-bottom:0}.resident-business-cta>a{display:inline-flex;align-items:center;gap:9px;flex:none;padding:12px 16px;border-radius:10px;background:#288e7b;color:#fff;text-decoration:none;font-weight:700}.resident-business-page{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(360px,.9fr);gap:48px;align-items:start;padding-top:60px;padding-bottom:70px}.resident-business-page h1{font:700 clamp(36px,5vw,56px)/1.04 Manrope,sans-serif;letter-spacing:-1.7px;color:#243a33;margin:16px 0}.resident-business-page>div>p{max-width:620px;color:#71817a;font-size:16px;line-height:1.65}.resident-business-page ul{display:grid;gap:12px;padding-left:20px;color:#4f6b60}.resident-business-form{grid-template-columns:1fr;padding:26px;background:#fff;border:1px solid #e6eeea;border-radius:18px;box-shadow:0 12px 38px #173c2a0c}.resident-business-form h2{margin:0 0 8px;font:700 24px Manrope,sans-serif}.resident-business-form button{width:100%}@media(max-width:850px){.resident-requirement-section,.resident-business-page{grid-template-columns:1fr}.resident-business-page{gap:25px}.resident-requirement-form{grid-template-columns:1fr 1fr}}@media(max-width:560px){.resident-requirement-form{grid-template-columns:1fr}.resident-business-cta{align-items:flex-start;flex-direction:column;padding:22px}.resident-business-cta>a{width:100%;justify-content:center}}
+
+.resident-requirement-success{display:grid;gap:9px;padding:16px 18px;border:1px solid #b8dfcb;border-radius:12px;background:#f0faf4;color:#245d40;font-size:14px}.resident-requirement-success>strong{font-size:17px}.resident-requirement-login-help{display:grid;gap:5px;padding:12px 14px;border-radius:9px;background:#fff;border:1px solid #d8ebdf}.resident-requirement-login-help>strong{font-size:14px}.resident-requirement-login-help small{color:#557163}.resident-requirement-success>a{display:inline-flex;align-items:center;gap:7px;width:max-content;color:#126b47;font-weight:700}
+
+.resident-requirement-success>.resident-requirement-login-button{min-height:42px;width:max-content;padding:0 15px;border-radius:9px;background:#237f60;color:#fff;text-decoration:none;font-size:13px;font-weight:750;box-shadow:0 4px 12px #237f6025}.resident-requirement-success>.resident-requirement-login-button:hover{background:#196b50}

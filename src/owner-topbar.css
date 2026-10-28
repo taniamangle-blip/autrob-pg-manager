@@ -5,6 +5,7 @@
 .network-top-link{display:flex;align-items:center;gap:7px;min-height:34px;padding:0 9px;border:1px solid transparent;border-radius:8px;color:#65736f;text-decoration:none;font-size:11px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
 .network-top-links button.network-top-link{background:transparent;font-family:inherit;cursor:pointer}
 .network-top-link:hover{background:#f3f8f5;border-color:#e5eee8;color:#287a68}
+.network-top-link.active{background:#edf6f1;border-color:#e3efe8;color:#287a68}
 .network-top-link svg{color:#498b77;flex:none}
 .network-top-link b{min-width:19px;height:19px;padding:0 5px;display:grid;place-items:center;border-radius:6px;background:#eef5f0;color:#3b8068;font-size:9px;line-height:1}
 .top-profile-wrap{position:relative;display:flex;align-items:center}
@@ -22,3 +23,4 @@
 .top-profile-logout:hover{background:#fff3f1}
 @media(max-width:1000px){.network-top-links{gap:1px}.network-top-link{gap:5px;padding-inline:6px;font-size:10px}.top-actions{gap:8px}.top-profile-copy{max-width:112px}}
 @media(max-width:760px){.topbar{gap:4px}.breadcrumbs{min-width:0}.top-actions{gap:4px}.network-top-links{gap:0;margin-right:0}.network-top-link{position:relative;width:32px;min-width:32px;height:32px;justify-content:center;padding:0;gap:0}.network-top-link span{display:none}.network-top-link b{position:absolute;right:-2px;top:-2px;min-width:15px;height:15px;margin:0;padding:0 3px;font-size:8px}.top-profile-trigger{gap:3px;padding:2px}.top-profile-copy,.top-profile-trigger>svg{display:none}.top-profile-menu{right:-3px}}
+.owner-wallet-chip{gap:8px;min-height:40px;padding:0 13px 0 7px;border-radius:12px;background:#f4faf5;border-color:#d4e8d8;color:#285e3c;font-size:12px;box-shadow:0 2px 5px #183a2308}.owner-wallet-chip-icon{width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:#dff1e3;color:#267144}.owner-wallet-chip-label{font-size:12px;font-weight:750;color:#42644c}.owner-wallet-chip strong{font-size:13px;font-weight:850;color:#255d39}.owner-wallet-chip:hover{background:#eaf6ed;border-color:#afd1b6;box-shadow:0 3px 9px #183a2314}@media(max-width:760px){.owner-wallet-chip{gap:6px;padding:0 8px 0 5px;min-height:35px}.owner-wallet-chip-icon{width:24px;height:24px}.owner-wallet-chip-label{display:none}.owner-wallet-chip strong{font-size:11px}}

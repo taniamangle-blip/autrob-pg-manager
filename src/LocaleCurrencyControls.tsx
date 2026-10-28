@@ -1,0 +1,6 @@
+import { useState } from 'react';
+import { Globe2 } from 'lucide-react';
+import './portal-preferences.css';
+const currencies=(()=>{try{return (Intl as typeof Intl&{supportedValuesOf?:(key:'currency')=>string[]}).supportedValuesOf?.('currency')||['INR','USD','EUR','GBP','AED','AUD','CAD','SGD','JPY','CNY']}catch{return ['INR','USD','EUR','GBP','AED','AUD','CAD','SGD','JPY','CNY']}})();
+const read=()=>{try{return JSON.parse(localStorage.getItem('autrob-stay-preferences')||'{}')}catch{return {}}};
+export default function LocaleCurrencyControls(){const [prefs,setPrefs]=useState(()=>({currency:'INR',language:'English',...read()}));const save=(value:typeof prefs)=>{setPrefs(value);localStorage.setItem('autrob-stay-preferences',JSON.stringify(value));window.dispatchEvent(new Event('autrob-preferences-updated'))};return <div className="portal-preference-controls" aria-label="Currency preference"><label title="Currency"><span><Globe2 size={14}/>Currency</span><select aria-label="Currency" value={prefs.currency} onChange={e=>save({...prefs,currency:e.target.value})}>{currencies.map(code=><option key={code} value={code}>{code}</option>)}</select></label></div>}

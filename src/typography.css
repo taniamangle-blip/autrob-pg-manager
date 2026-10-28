@@ -1,0 +1,109 @@
+/* Autrob Stay design system: shared type, color, spacing and control hierarchy. */
+:root {
+  font-size: 15px;
+  font-family: 'DM Sans', sans-serif;
+  color: #20282e;
+  --font-body: 'DM Sans', sans-serif;
+  --font-heading: 'Manrope', 'DM Sans', sans-serif;
+  --type-caption: 0.75rem;
+  --type-small: 0.8125rem;
+  --type-body: 0.9375rem;
+  --type-body-large: 1rem;
+  --type-subheading: 1.125rem;
+  --type-heading: 1.375rem;
+  --type-page: clamp(1.75rem, 2.2vw, 2rem);
+  --type-display: clamp(2.5rem, 5vw, 3.75rem);
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+  --leading-tight: 1.15;
+  --leading-heading: 1.25;
+  --leading-body: 1.55;
+  --ink-strong: #20282e;
+  --ink-body: #46545a;
+  --ink-muted: #748087;
+  --ink-subtle: #89949a;
+  --brand: #288e7b;
+  --brand-strong: #207968;
+  --brand-soft: #edf6f2;
+  --danger: #b84843;
+  --success: #287a5f;
+  --warning: #a66c28;
+  --line-soft: #e8edee;
+  --surface: #ffffff;
+  --surface-muted: #f7f8fa;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+}
+
+html { font-size: 100%; text-size-adjust: 100%; }
+body { font-family: var(--font-body); font-size: var(--type-body); line-height: var(--leading-body); color: var(--ink-strong); }
+button, input, select, textarea { font-family: inherit; }
+
+/* Page and section hierarchy */
+.welcome-row h1, .module-welcome h1, .pa-page-head h1, .net-detail-head h1,
+.net-hero h1, .na-title { font-family: var(--font-heading); font-size: var(--type-page) !important; line-height: var(--leading-tight); letter-spacing: -0.04em; font-weight: var(--weight-bold); }
+.login-pitch h1, .pa-auth-copy h1 { font-family: var(--font-heading); line-height: 1.08; letter-spacing: -0.045em; }
+.card-heading h2, .pa-card-head h2, .pa-modal-head h2, .net-panel h2,
+.message-modal h2, .na-modal h2 { font-family: var(--font-heading); font-size: var(--type-heading) !important; line-height: var(--leading-heading); letter-spacing: -0.025em; font-weight: var(--weight-bold); }
+.net-property-info h3, .net-panel h3, .na-post h2 { font-family: var(--font-heading); font-size: var(--type-subheading) !important; line-height: var(--leading-heading); font-weight: var(--weight-bold); }
+.welcome-row p, .module-welcome p, .card-heading p, .pa-page-head p,
+.login-card > p, .net-hero p, .net-panel p { font-size: var(--type-body-large) !important; line-height: var(--leading-body); color: var(--ink-muted); }
+
+/* Owner workspace navigation and dashboard */
+.brand { font-family: var(--font-heading); font-size: 1.3rem; }
+.nav-item, .org-select strong, .profile strong, .breadcrumbs { font-size: var(--type-small) !important; }
+.nav-label, .section-kicker, .eyebrow { font-size: var(--type-caption) !important; letter-spacing: 0.08em; }
+.button, .text-button, .select-wrap, .filter-chip, .segmented button,
+.nav-group-toggle, .nav-group-subitem { font-size: var(--type-small) !important; }
+.stat-top, .module-metric > span, .table-card td, .table-main,
+.table-person > strong, .payment-person strong, .activity-text strong,
+.property-title h2 { font-size: var(--type-body) !important; }
+.stat-value { font-size: 1.875rem !important; line-height: var(--leading-tight); }
+.stat-sub, .table-sub, .payment-person span, .payment-amount span,
+.activity-text span, .profile small, .org-select small { font-size: var(--type-small) !important; }
+.table-card th { font-size: var(--type-caption) !important; letter-spacing: 0.07em; }
+.search-field input, .table-toolbar input, .modal label, .modal input,
+.modal select, .modal textarea { font-size: var(--type-body) !important; }
+
+/* Platform admin, network admin, Messages and public booking site */
+.pa-nav, .pa-group-toggle, .pa-primary, .pa-secondary, .pa-table td,
+.pa-table-owner strong, .pa-toolbar input, .pa-form-grid label,
+.pa-form-grid input, .pa-form-grid select, .pa-modal-head p,
+.pa-login > p, .pa-login > label, .pa-login > label > input,
+.pa-action-link, .pa-toast, .pa-issued-key > span, .pa-issued-key > small,
+.na-content, .na-form label, .na-form input, .na-form select, .na-form textarea,
+.na-table td, .na-post p, .net-form-grid label, .net-form-grid input,
+.net-form-grid select, .net-form-grid textarea, .net-button, .net-back,
+.net-filter-bar, .net-property-info p, .net-lead-card, .messages-center,
+.messages-center button, .messages-center input, .messages-center select,
+.messages-center textarea, .messages-center label { font-size: var(--type-small) !important; }
+.pa-table th, .pa-status, .pa-plan, .pa-table-owner small,
+.na-post-meta, .net-eyebrow, .net-fine, .net-footer { font-size: var(--type-caption) !important; }
+.pa-table td, .na-table td, .net-lead-card, .net-property-info p { line-height: var(--leading-body); }
+.net-hero h1 { font-size: clamp(2.5rem, 5.2vw, 4rem) !important; }
+.net-price-box > strong, .net-property-bottom strong { font-family: var(--font-heading); font-size: 1.5rem !important; }
+.messages-center h1 { font-family: var(--font-heading); font-size: var(--type-page) !important; }
+.messages-center h2 { font-family: var(--font-heading); font-size: var(--type-heading) !important; }
+
+/* Clear, consistent form controls and keyboard focus */
+input, select, textarea { color: var(--ink-strong); }
+:where(button, a, input, select, textarea):focus-visible { outline: 3px solid #288e7b55; outline-offset: 2px; }
+::placeholder { color: #89949a; opacity: 1; }
+
+@media (max-width: 760px) {
+  :root { font-size: 14px; }
+  .welcome-row h1, .module-welcome h1, .pa-page-head h1 { font-size: 1.75rem !important; }
+  .net-hero h1 { font-size: clamp(2.25rem, 10vw, 3rem) !important; }
+  .card-heading h2, .pa-card-head h2, .pa-modal-head h2, .net-panel h2 { font-size: 1.25rem !important; }
+}

@@ -4,44 +4,58 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f7f8fa" />
-    <meta name="description" content="Autrob PG Manager helps PG and hostel owners manage properties, residents and finances." />
-    <link rel="icon" type="image/x-icon" href="/nivasbook.ico" />
+    <meta name="description" content="Autrob Stay helps PG and hostel owners manage properties, residents and finances." />
+    <link rel="icon" type="image/x-icon" href="/autrob-stay.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <title>Autrob PG Manager</title>
+    <title>Autrob Stay</title>
   </head>
   <body>
     <div id="root">
-      <div style="min-height:100vh;display:grid;place-items:center;background:#f4f7f5;color:#52655b;font:14px Arial,sans-serif">Starting Nivasbook…</div>
+      <div style="min-height:100vh;display:grid;place-items:center;background:#f4f7f5;color:#52655b;font:14px Arial,sans-serif">Starting Autrob Stay…</div>
     </div>
     <script>
-      async function showNivasbookStartupError(reason) {
+      async function showAutrobStayStartupError(reason) {
         if (document.documentElement.dataset.nivasbookReady) return;
         const root = document.getElementById('root');
         if (!root) return;
         let details = reason || 'The app entry script did not start.';
         try {
           const response = await fetch('/src/main.tsx', { cache: 'no-store' });
-          details += '\nApp entry response: HTTP ' + response.status;
+          const contentType = response.headers.get('content-type') || '(missing)';
+          details += '\nApp entry response: HTTP ' + response.status + ' · ' + contentType;
           if (!response.ok) {
             const body = (await response.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
             if (body) details += '\n' + body.slice(0, 500);
+          } else if (!contentType.includes('javascript')) {
+            details += '\nThe server returned the entry file with a non-JavaScript content type. Restart the website from the project folder.';
           } else {
-            details += '\nThe entry file is reachable. The browser may be blocking module execution; open this URL in Chrome or Edge on the same computer.';
+            const source = await response.text();
+            if (/^\s*<!doctype html/i.test(source)) {
+              details += '\nThe entry URL returned the website HTML instead of JavaScript. Restart the Vite development server.';
+            } else {
+              details += '\nJavaScript was served but did not finish loading. Check the browser console for the first failed import or module error.';
+            }
           }
         } catch (error) {
           details += '\nCould not check the app entry: ' + (error instanceof Error ? error.message : String(error));
         }
-        root.innerHTML = '<main style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f4f7f5;color:#26352e;font:14px Arial,sans-serif"><section style="max-width:580px;padding:26px;border:1px solid #e0e8e3;border-radius:16px;background:white"><b style="color:#28775b;letter-spacing:1px">NIVASBOOK</b><h2>The app did not finish starting</h2><p style="color:#68766f;line-height:1.6">The app script did not run. This diagnostic checks whether the local server can provide it.</p><pre id="nivasbook-startup-details" style="padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:8px;background:#f6f8f7;color:#954a42;font-size:12px"></pre><button onclick="location.reload()" style="padding:10px 16px;border:0;border-radius:8px;background:#288567;color:white;font-weight:bold">Reload app</button></section></main>';
+        root.innerHTML = '<main style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f4f7f5;color:#26352e;font:14px Arial,sans-serif"><section style="max-width:580px;padding:26px;border:1px solid #e0e8e3;border-radius:16px;background:white"><b style="color:#28775b;letter-spacing:1px">AUTROB STAY</b><h2>The app did not finish starting</h2><p style="color:#68766f;line-height:1.6">The app script did not run. This diagnostic checks whether the local server can provide it.</p><pre id="nivasbook-startup-details" style="padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:8px;background:#f6f8f7;color:#954a42;font-size:12px"></pre><button onclick="location.reload()" style="padding:10px 16px;border:0;border-radius:8px;background:#288567;color:white;font-weight:bold">Reload app</button></section></main>';
         root.querySelector('#nivasbook-startup-details').textContent = details;
       }
       window.addEventListener('error', function (event) {
         if (event.target && event.target.tagName === 'SCRIPT') {
-          showNivasbookStartupError('Failed to load script: ' + (event.target.src || '(unknown script)'));
+          showAutrobStayStartupError('Failed to load script: ' + (event.target.src || '(unknown script)'));
+        } else if (!event.target || event.target === window) {
+          showAutrobStayStartupError('App startup error: ' + (event.message || 'unknown JavaScript error') + (event.filename ? ' (' + event.filename + ':' + event.lineno + ')' : ''));
         }
       }, true);
-      setTimeout(() => showNivasbookStartupError('The app entry script did not start within 12 seconds.'), 12000);
+      window.addEventListener('unhandledrejection', function (event) {
+        const reason = event.reason;
+        showAutrobStayStartupError('App import failed: ' + (reason && reason.message ? reason.message : String(reason)));
+      });
+      setTimeout(() => showAutrobStayStartupError('The app entry script did not start within 30 seconds.'), 30000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

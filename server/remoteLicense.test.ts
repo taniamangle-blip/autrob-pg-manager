@@ -100,4 +100,3 @@ test('Windows activation forwards to hosted licensing and stores an active local
     else process.env.NIVASBOOK_LICENSE_SERVER_URL = original.serverUrl;
   }
 });
-

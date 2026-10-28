@@ -4,11 +4,12 @@ type ResidentLike = {
   id?: string; name: string; property: string; propertyId?: string | null; room: string; moveIn?: string;
   checkInDate?: string; checkOutDate?: string; exitDate?: string; joined: string; stayType?: 'Monthly' | 'Day Pass';
   color: string; roomHistory?: { previousProperty: string; previousRoom: string; currentProperty: string; currentRoom: string; switchedAt: string }[];
+  bookings?: { property?: string; room: string; moveIn?: string; checkOutDate?: string; occupancyStatus?: string }[];
 };
 type PropertyLike = { id: string; name: string };
 type RoomLike = { id: string; propertyId: string; number: string; floorName: string };
 type ReadingLike = { propertyId: string; meterType: 'Main meter' | 'Sub meter'; year: number; month: number; floorName: string; roomId: string | null; roomNumber: string; commonReading: number; reading: number | null; readingMode?: 'readings' | 'direct'; previousReading?: number | null; previousCommonReading?: number | null };
-type Allocation = { id: string; name: string; color: string; stayType: 'Monthly' | 'Day Pass'; property: string; floor: string; room: string; days: number; roomPersonDays: number; floorPersonDays: number; roomUnits: number | null; commonUnits: number | null; totalUnits: number | null; rate: number; amount: number | null };
+type Allocation = { id: string; name: string; color: string; stayType: 'Monthly' | 'Day Pass'; property: string; floor: string; room: string; days: number; roomPersonDays: number; floorPersonDays: number; roomUnits: number | null; commonUnits: number | null; totalUnits: number | null; rate: number; amount: number | null; distributionSource: 'Main meter' | 'Sub meter' };
 type RoomSummary = ElectricityCalculation['roomSummary'][number] & { room: string };
 
 const isoDay = (value?: string) => {
@@ -20,26 +21,34 @@ const isoDay = (value?: string) => {
 const roomNo = (value: string) => String(value || '').replace(/^Room\s+/i, '').split(/\s+[·-]\s+Bed\s+/i)[0].trim();
 
 function residentSegments(r: ResidentLike): ElectricityGuestInput['segments'] {
-  const fromStart = isoDay(r.moveIn || r.checkInDate || r.joined);
-  if (!fromStart) return [];
-  const history = [...(r.roomHistory || [])].sort((a, b) => a.switchedAt.localeCompare(b.switchedAt));
-  let property = history[0]?.previousProperty || r.property;
-  let room = roomNo(history[0]?.previousRoom || r.room);
-  let from = fromStart;
   const segments: ElectricityGuestInput['segments'] = [];
-  for (const event of history) {
-    const switched = isoDay(event.switchedAt);
-    if (!switched) continue;
-    const dayBefore = new Date(`${switched}T00:00:00Z`);
-    dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-    const through = dayBefore.toISOString().slice(0, 10);
-    if (room && property && through >= from) segments.push({ residentId: r.id || r.name, residentName: r.name, room, property, checkIn: from, checkOut: through });
-    property = event.currentProperty;
-    room = roomNo(event.currentRoom);
-    from = switched;
+  if (!(r.stayType === 'Day Pass' && r.bookings?.length)) {
+    const fromStart = isoDay(r.moveIn || r.checkInDate || r.joined);
+    if (fromStart) {
+      const history = [...(r.roomHistory || [])].sort((a, b) => a.switchedAt.localeCompare(b.switchedAt));
+      let property = history[0]?.previousProperty || r.property;
+      let room = roomNo(history[0]?.previousRoom || r.room);
+      let from = fromStart;
+      for (const event of history) {
+        const switched = isoDay(event.switchedAt);
+        if (!switched) continue;
+        const dayBefore = new Date(`${switched}T00:00:00Z`);
+        dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+        const through = dayBefore.toISOString().slice(0, 10);
+        if (room && property && through >= from) segments.push({ residentId: r.id || r.name, residentName: r.name, room, property, checkIn: from, checkOut: through });
+        property = event.currentProperty;
+        room = roomNo(event.currentRoom);
+        from = switched;
+      }
+      const checkOut = isoDay(r.checkOutDate || r.exitDate);
+      if (room) segments.push({ residentId: r.id || r.name, residentName: r.name, room, property, checkIn: from, checkOut: checkOut || undefined });
+    }
   }
-  const checkOut = isoDay(r.checkOutDate || r.exitDate);
-  if (room) segments.push({ residentId: r.id || r.name, residentName: r.name, room, property, checkIn: from, checkOut: checkOut || undefined });
+  for (const booking of r.bookings || []) {
+    const checkIn = isoDay(booking.moveIn);
+    const room = roomNo(booking.room || r.room);
+    if (checkIn && room && booking.occupancyStatus !== 'Cancelled') segments.push({ residentId: r.id || r.name, residentName: r.name, room, property: booking.property || r.property, checkIn, checkOut: isoDay(booking.checkOutDate) || undefined });
+  }
   return segments;
 }
 
@@ -55,9 +64,13 @@ export function calculateElectricityView(data: { properties: PropertyLike[]; roo
     const current = data.meterReadings.filter(r => r.propertyId === property.id && r.meterType === 'Sub meter' && r.year === year && r.month === month);
     const priorDate = new Date(year, month - 2, 1);
     const previous = data.meterReadings.filter(r => r.propertyId === property.id && r.meterType === 'Sub meter' && r.year === priorDate.getFullYear() && r.month === priorDate.getMonth() + 1);
+    const mainMeterFallback = current.length === 0;
+    const mainCurrent = mainMeterFallback ? data.meterReadings.find(r => r.propertyId === property.id && r.meterType === 'Main meter' && r.year === year && r.month === month) : undefined;
+    const mainPrevious = mainMeterFallback ? data.meterReadings.find(r => r.propertyId === property.id && r.meterType === 'Main meter' && r.year === priorDate.getFullYear() && r.month === priorDate.getMonth() + 1) : undefined;
     const roomUnits: Record<string, number> = {};
     const missingRooms = new Set<string>();
     for (const room of data.rooms.filter(r => r.propertyId === property.id)) {
+      if (mainMeterFallback) continue;
       const row = current.find(r => r.roomId === room.id || r.roomNumber === room.number);
       if (!row || row.reading === null) {
         if (data.residents.some(r => (r.propertyId === property.id || r.property === property.name) && roomNo(r.room) === room.number)) missingRooms.add(room.number);
@@ -72,12 +85,27 @@ export function calculateElectricityView(data: { properties: PropertyLike[]; roo
     const floors = [...new Set(data.rooms.filter(r => r.propertyId === property.id).map(r => r.floorName || 'Floor not set'))];
     let propertyCommonUnits = 0;
     let missingCommon = false;
-    for (const floor of floors) {
-      const row = current.find(r => (r.floorName || 'Floor not set') === floor);
-      const prior = previous.find(r => (r.floorName || 'Floor not set') === floor);
-      if (!row || row.readingMode !== 'direct' && row.previousCommonReading == null && !prior) { missingCommon = true; continue; }
-      try { propertyCommonUnits += row.readingMode === 'direct' ? meterConsumption(Number(row.commonReading), undefined, 'direct') : meterConsumption(Number(row.commonReading), Number(row.previousCommonReading ?? prior!.commonReading)); }
-      catch { exceptions.push(`${property.name}, ${floor}: common-area reading is below the previous reading.`); missingCommon = true; }
+    let missingMainMeter = false;
+    if (mainMeterFallback) {
+      if (!mainCurrent || mainCurrent.reading === null) missingMainMeter = true;
+      else {
+        try {
+          const baseline = mainCurrent.previousReading ?? (mainPrevious?.readingMode === 'direct' ? 0 : mainPrevious?.reading ?? 0);
+          propertyCommonUnits = meterConsumption(Number(mainCurrent.reading), Number(baseline), mainCurrent.readingMode || 'readings');
+        } catch {
+          exceptions.push(`${property.name}: the main-meter consumption could not be calculated from its saved reading.`);
+          missingMainMeter = true;
+        }
+      }
+      if (missingMainMeter) exceptions.push(`${property.name}: add a main-meter reading for this month, or sub-meter readings to calculate resident bills.`);
+    } else {
+      for (const floor of floors) {
+        const row = current.find(r => (r.floorName || 'Floor not set') === floor);
+        const prior = previous.find(r => (r.floorName || 'Floor not set') === floor);
+        if (!row || row.readingMode !== 'direct' && row.previousCommonReading == null && !prior) { missingCommon = true; continue; }
+        try { propertyCommonUnits += row.readingMode === 'direct' ? meterConsumption(Number(row.commonReading), undefined, 'direct') : meterConsumption(Number(row.commonReading), Number(row.previousCommonReading ?? prior!.commonReading)); }
+        catch { exceptions.push(`${property.name}, ${floor}: common-area reading is below the previous reading.`); missingCommon = true; }
+      }
     }
 
     const guests = data.residents.flatMap(r => {
@@ -96,7 +124,7 @@ export function calculateElectricityView(data: { properties: PropertyLike[]; roo
       const rooms = Object.keys(bill.roomDays);
       const invalidRoom = rooms.some(room => missingRooms.has(room));
       const floorNames = rooms.map(n => data.rooms.find(r => r.propertyId === property.id && r.number === n)?.floorName || 'Floor not set').filter((f, i, all) => all.indexOf(f) === i);
-      allocations.push({ id: bill.residentId, name: bill.name, color: resident?.color || 'mint', stayType: resident?.stayType || 'Monthly', property: property.name, floor: floorNames.join(', '), room: bill.room, days: bill.stayDays, roomPersonDays: Object.values(bill.roomDays).reduce((n, d) => n + d, 0), floorPersonDays: result.bills.reduce((n, line) => n + line.stayDays, 0), roomUnits: invalidRoom ? null : bill.roomUnits, commonUnits: missingCommon ? null : bill.commonUnits, totalUnits: invalidRoom || missingCommon ? null : bill.totalUnits, rate, amount: invalidRoom || missingCommon ? null : bill.amount });
+      allocations.push({ id: bill.residentId, name: bill.name, color: resident?.color || 'mint', stayType: resident?.stayType || 'Monthly', property: property.name, floor: floorNames.join(', '), room: bill.room, days: bill.stayDays, roomPersonDays: Object.values(bill.roomDays).reduce((n, d) => n + d, 0), floorPersonDays: result.bills.reduce((n, line) => n + line.stayDays, 0), roomUnits: invalidRoom || missingMainMeter ? null : bill.roomUnits, commonUnits: missingCommon || missingMainMeter ? null : bill.commonUnits, totalUnits: invalidRoom || missingCommon || missingMainMeter ? null : bill.totalUnits, rate, amount: invalidRoom || missingCommon || missingMainMeter ? null : bill.amount, distributionSource: mainMeterFallback ? 'Main meter' : 'Sub meter' });
     }
   }
 

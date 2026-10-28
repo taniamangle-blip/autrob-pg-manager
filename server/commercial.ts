@@ -102,6 +102,8 @@ export function installCommercialSchema(db: Database.Database) {
   const licenseColumns = db.prepare('PRAGMA table_info(saas_licenses)').all() as { name: string }[];
   if (!licenseColumns.some(c => c.name === 'plan_code')) db.exec('ALTER TABLE saas_licenses ADD COLUMN plan_code TEXT NOT NULL DEFAULT \'\'');
   if (!licenseColumns.some(c => c.name === 'subscription_id')) db.exec('ALTER TABLE saas_licenses ADD COLUMN subscription_id TEXT NOT NULL DEFAULT \'\'');
+  if (!licenseColumns.some(c => c.name === 'owner_login_email')) db.exec("ALTER TABLE saas_licenses ADD COLUMN owner_login_email TEXT NOT NULL DEFAULT ''");
+  if (!licenseColumns.some(c => c.name === 'owner_login_password_hash')) db.exec("ALTER TABLE saas_licenses ADD COLUMN owner_login_password_hash TEXT NOT NULL DEFAULT ''");
 
   const now = new Date().toISOString();
   const insertPlan = db.prepare(`INSERT OR IGNORE INTO commercial_plans

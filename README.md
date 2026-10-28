@@ -19,7 +19,7 @@ Run `npm run dev:desktop` for development, `npm run desktop:pack` for an unpacke
 
 On first desktop launch, the app creates a random owner password and displays it once. Save it securely and change it after signing in. The Backup screen offers integrity-checked backups, a daily 2:00 AM automatic backup while the app is running, an optional external backup folder, and a restore flow that validates the selected database and creates a safety backup first. Desktop startup does not move or modify the old project `data` folder; use Restore to import an existing database copy.
 
-The platform administration console includes tenant, subscription, SaaS payment, and license management. Platform admins can issue a license from **Manage → Licences**; an owner activates its key from the owner app's **Settings → Plan & billing** area. SaaS payments are recorded manually; no payment gateway is connected.
+The platform administration console includes tenant, subscription, SaaS payment, and license management. Platform admins can issue a license from **Manage → Licences**; an owner activates its key from the owner app's **Settings → Plan & billing** area. Wallet top-ups are requested by owners and credited by an admin after review. Residents and owners record payments outside the application; no payment gateway is connected.
 
 ## First login
 
@@ -34,7 +34,7 @@ The **Settings** admin area saves owner identity, PG business name/address, UPI 
 
 Open `http://127.0.0.1:3000/platform` for the separate Nivasbook staff console. The initial local platform admin is `platform@nivasbook.local` with password `NivasAdmin@2026`. For a hosted deployment, set `NIVASBOOK_PLATFORM_EMAIL`, `NIVASBOOK_PLATFORM_PASSWORD`, `NIVASBOOK_OWNER_EMAIL`, `NIVASBOOK_OWNER_PASSWORD`, and `NIVASBOOK_SESSION_SECRET` to private values before the first server start.
 
-The platform console registers PG workspaces, assigns owner login IDs and initial passwords, resets owner passwords, tracks trial and subscription status, and records SaaS receipts with billing periods, methods, and references. A recorded successful payment activates the workspace and saves its next billing date. SaaS records are manual payment reconciliation; a payment gateway or automatic card/UPI collection is not connected. Suspended or cancelled tenants and expired trials cannot sign in.
+The platform console registers PG workspaces, assigns owner login IDs and initial passwords, resets owner passwords, tracks trial and subscription status, and records SaaS receipts with billing periods, methods, and references. A recorded successful payment activates the workspace and saves its next billing date. SaaS receipts remain manual reconciliation; suspended or cancelled tenants and expired trials cannot sign in.
 
 ## Data
 
@@ -54,4 +54,3 @@ The Blueprint attaches a paid persistent disk at `/var/data` because SQLite stor
 Use `render.free-test.yaml` as the Blueprint path to test a Windows activation key without adding a payment method. This separate Blueprint omits the persistent disk and uses `/tmp/nivasbook-data`; Render may erase its SQLite database when the free service spins down, restarts, or redeploys. Use test accounts and test licenses only. Do not enter real resident or owner data. Set the four owner/platform-admin secrets during Blueprint setup, then visit `/platform` to register a test owner and issue a license key. The desktop package forwards activation requests to `https://nivasbook-license-test.onrender.com`; only package a test build after that service is live. The free test API accepts high-entropy, single-use issued license keys and enforces the plan's device limit.
 
 Some parts of the owner interface remain previews: electricity reading allocation, maintenance tickets, staff, messaging, and reminders do not yet write to the database. Property room counts and bed capacities are stored, and room numbers and bed slots can be added, edited, and deleted from Rooms & beds. Manager accounts currently share workspace data permissions; fine-grained role permissions, external WhatsApp/email, and remote backups are not implemented.
-

@@ -28,4 +28,3 @@ services:
         sync: false
       - key: NIVASBOOK_ENABLE_DESKTOP_LICENSE_ACTIVATION
         value: "1"
-
