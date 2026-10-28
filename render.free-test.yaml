@@ -3,7 +3,7 @@
 # restart, or deploy. Never use this Blueprint for real owner or resident data.
 services:
   - type: web
-    name: nivasbook-license-test
+    name: autrobstay
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run build
