@@ -732,6 +732,8 @@ CREATE TABLE IF NOT EXISTS network_sample_dismissals (organization_id TEXT NOT N
     if (!db.prepare("SELECT id FROM marketplace_categories WHERE id=?").get(categoryId)) continue;
     demoMarket.run(id, demoOrg, categoryId, kind, title, description, "/demo/marketplace-bunk-bed.jpg", price, priceType, "Pune", "Pune and nearby areas", "Autrob Stay Marketplace Demo", "", "", availability, demoNow, demoNow);
   }
+  const sampleImage = db.prepare("UPDATE marketplace_listings SET image_url=? WHERE id=? AND organization_id=?");
+  for (const [id, image] of [["demo-market-bunk-bed","/demo/marketplace-bunk-bed.jpg"],["demo-market-bedroom-pack","/demo/pg-sample-room.jpg"],["demo-market-linen-pack","/demo/pg-sample-room.jpg"],["demo-market-beds","/demo/marketplace-bunk-bed.jpg"],["demo-market-mattress","/demo/pg-sample-room.jpg"],["demo-market-cctv","/demo/owner-community.jpg"],["demo-market-water","/demo/pg-sample-room.jpg"],["demo-market-laundry","/demo/owner-community.jpg"],["demo-market-plumbing","/demo/pg-sample-room.jpg"],["demo-market-electrical","/demo/owner-community.jpg"],["demo-market-cleaning","/demo/pg-sample-room.jpg"],["demo-market-ac","/demo/pg-sample-room.jpg"],["demo-market-setup","/demo/owner-community.jpg"]]) sampleImage.run(image, id, demoOrg);
 }
 var ensurePaymentColumns = () => {
   const columns = new Set(db.prepare("PRAGMA table_info(payments)").all().map((c) => String(c.name)));
@@ -1375,6 +1377,60 @@ app.get("/api/backups/:name/download", ownerAuth, (req, res) => {
     return res.status(400).json({ error: "The selected backup failed verification." });
   }
 });
+app.post("/api/backups/restore", ownerAuth, express.raw({ type: ["application/vnd.sqlite3", "application/octet-stream"], limit: "100mb" }), async (req, res) => {
+  const owner = userFor(req), orgId2 = owner.organizationId, bytes = req.body;
+  if (!Buffer.isBuffer(bytes) || bytes.length < 100) return res.status(400).json({ error: "Choose a valid Autrob Stay SQLite backup file." });
+  const orgKey = crypto2.createHash("sha256").update(orgId2).digest("hex").slice(0, 20), backupDir = path.join(dataDir, "backups", orgKey);
+  let uploadedPath = "", source;
+  try {
+    await fs.mkdir(backupDir, { recursive: true });
+    uploadedPath = path.join(dataDir, `restore-upload-${crypto2.randomUUID()}.sqlite`);
+    await fs.writeFile(uploadedPath, bytes, { flag: "wx" });
+    source = new Database(uploadedPath, { readonly: true, fileMustExist: true });
+    const integrity = source.pragma("integrity_check", { simple: true });
+    const hasOwnerOrg = !!source.prepare("SELECT 1 FROM organizations WHERE id=?").get(orgId2);
+    const hasOtherOrg = !!source.prepare("SELECT 1 FROM organizations WHERE id<>? LIMIT 1").get(orgId2);
+    const required = ["properties", "rooms", "beds", "residents", "payments", "expenses"];
+    const present = new Set(source.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((x) => x.name));
+    if (integrity !== "ok" || !hasOwnerOrg || hasOtherOrg || required.some((name) => !present.has(name))) {
+      source.close(); source = void 0;
+      return res.status(400).json({ error: "This file is not a verified backup for your workspace. No live data was changed." });
+    }
+    const safetyName = `nivasbook-workspace-before-restore-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`, safetyPath = path.join(backupDir, safetyName);
+    await db.backup(safetyPath);
+    const safety = new Database(safetyPath);
+    try {
+      safety.pragma("foreign_keys = OFF");
+      const snapshotTables = safety.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
+      safety.transaction(() => { for (const { name } of snapshotTables) { const cols = safety.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all(); if (cols.some((c) => c.name === "organization_id")) safety.prepare(`DELETE FROM ${JSON.stringify(name)} WHERE organization_id<>?`).run(orgId2); else if (name === "platform_admins") safety.prepare("DELETE FROM platform_admins").run(); } })();
+    } finally { safety.close(); }
+    source.close(); source = new Database(uploadedPath, { readonly: true, fileMustExist: true });
+    const keepCurrent = /^(users|organizations|platform_admins|saas_|commercial_|owner_master_licenses|desktop_master_license|schema_migrations|audit_logs?$)/i;
+    const tableNames = [...present].filter((name) => /^[a-zA-Z0-9_]+$/.test(name));
+    const restoreCounts = {};
+    db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        const tables = tableNames.map((name) => ({ name, current: db.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all(), backup: source.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all() })).filter((t) => t.current.some((c) => c.name === "organization_id") && !keepCurrent.test(t.name));
+        for (const table of [...tables].reverse()) restoreCounts[table.name] = db.prepare(`DELETE FROM ${JSON.stringify(table.name)} WHERE organization_id=?`).run(orgId2).changes;
+        for (const table of tables) {
+          const columns = table.current.map((c) => c.name).filter((name) => table.backup.some((b) => b.name === name));
+          const select = source.prepare(`SELECT ${columns.map((c) => JSON.stringify(c)).join(",")} FROM ${JSON.stringify(table.name)} WHERE organization_id=?`);
+          const insert = db.prepare(`INSERT INTO ${JSON.stringify(table.name)} (${columns.map((c) => JSON.stringify(c)).join(",")}) VALUES (${columns.map(() => "?").join(",")})`);
+          let count = 0; for (const row of select.iterate(orgId2)) { insert.run(...columns.map((c) => row[c])); count++; }
+          restoreCounts[table.name] = count;
+        }
+      })();
+    } finally { db.pragma("foreign_keys = ON"); }
+    source.close(); source = void 0;
+    audit(orgId2, owner.id, "workspace.backup_restored", "backup", safetyName);
+    res.json({ ok: true, restored: restoreCounts, safetyBackup: safetyName });
+  } catch (error) {
+    source?.close();
+    console.error("Workspace backup restore failed:", error instanceof Error ? error.message : "unknown");
+    res.status(500).json({ error: "Could not restore this backup. The current workspace was preserved." });
+  } finally { if (uploadedPath) await fs.rm(uploadedPath, { force: true }).catch(() => {}); }
+});
 app.post("/api/backups/clear-data", ownerAuth, (req, res) => {
   const user = userFor(req), orgId2 = user.organizationId, backupName = String(req.body?.backupName || ""), downloadKey = `${orgId2}:${backupName}`;
   if (!/^nivasbook-workspace-[a-z0-9T_-]+\.sqlite$/i.test(backupName) || !downloadedWorkspaceBackups.has(downloadKey)) return res.status(400).json({ error: "Download this verified backup from Verified copies before deleting workspace data." });
@@ -1715,7 +1771,7 @@ app.post("/api/auth/login", (req, res) => {
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "Could not start your session." });
     req.session.userId = user.id;
-    res.json({ user: { id: user.id, name: user.name, email: user.email } });
+    req.session.save((saveError) => saveError ? res.status(500).json({ error: "Could not save your sign-in session." }) : res.json({ user: { id: user.id, name: user.name, email: user.email } }));
   });
 });
 app.post("/api/auth/signup", (req, res) => {
@@ -1734,7 +1790,7 @@ app.post("/api/auth/signup", (req, res) => {
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: "Account created, but the session could not start. Please sign in." });
       req.session.userId = userId;
-      res.status(201).json({ user: { id: userId, name, email }, trialEndsAt: end });
+      req.session.save((saveError) => saveError ? res.status(500).json({ error: "Account was created, but the sign-in session could not be saved. Please sign in." }) : res.status(201).json({ user: { id: userId, name, email }, trialEndsAt: end }));
     });
   } catch (e) {
     res.status(e?.code?.startsWith("SQLITE_CONSTRAINT") ? 409 : 500).json({ error: e?.code?.startsWith("SQLITE_CONSTRAINT") ? "This email already has an account. Please sign in." : "Could not create owner account." });
@@ -1751,7 +1807,7 @@ app.post("/api/platform/login", (req, res) => {
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "Could not start platform session." });
     req.session.platformAdminId = admin.id;
-    res.json({ admin: { id: admin.id, name: admin.name, email: admin.email } });
+    req.session.save((saveError) => saveError ? res.status(500).json({ error: "Could not save platform session." }) : res.json({ admin: { id: admin.id, name: admin.name, email: admin.email } }));
   });
 });
 app.post("/api/platform/logout", (req, res) => {
@@ -1932,14 +1988,14 @@ app.patch("/api/platform/business-inquiries/:id", platformAuth, (req, res) => {
   res.json({ ok: true });
 });
 app.get("/api/platform/overview", platformAuth, (_req, res) => {
-  const totals = db.prepare(`SELECT COUNT(*) as owners,SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) as active,SUM(CASE WHEN status='Trial' THEN 1 ELSE 0 END) as trials,SUM(CASE WHEN status='Past due' THEN 1 ELSE 0 END) as pastDue,(SELECT COALESCE(SUM(amount),0) FROM saas_payments WHERE status='Paid') as collected,(SELECT COUNT(*) FROM saas_payments WHERE status='Pending') as awaiting FROM organizations`).get();
+  const totals = db.prepare(`SELECT COUNT(*) as owners,SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) as active,SUM(CASE WHEN status='Trial' THEN 1 ELSE 0 END) as trials,SUM(CASE WHEN status='Past due' THEN 1 ELSE 0 END) as pastDue,(SELECT COALESCE(SUM(amount),0) FROM saas_payments WHERE status='Paid' AND organization_id<>'org-nivasbook-demo') as collected,(SELECT COUNT(*) FROM saas_payments WHERE status='Pending' AND organization_id<>'org-nivasbook-demo') as awaiting FROM organizations WHERE id<>'org-nivasbook-demo'`).get();
   totals.collected += Number(db.prepare("SELECT COALESCE(SUM(amount_paise),0)/100.0 as total FROM commercial_payments WHERE payment_status='Paid'").get().total || 0);
   totals.awaiting += Number(db.prepare("SELECT COUNT(*) as total FROM commercial_subscriptions WHERE subscription_status='PENDING'").get().total || 0);
-  const recent = db.prepare(`SELECT p.id,p.organization_id as organizationId,o.name as pgName,p.amount,p.status,p.method,p.reference,p.period_start as periodStart,p.period_end as periodEnd,p.paid_at as paidAt,p.created_at as createdAt FROM saas_payments p JOIN organizations o ON o.id=p.organization_id ORDER BY p.created_at DESC LIMIT 8`).all();
+  const recent = db.prepare(`SELECT p.id,p.organization_id as organizationId,o.name as pgName,p.amount,p.status,p.method,p.reference,p.period_start as periodStart,p.period_end as periodEnd,p.paid_at as paidAt,p.created_at as createdAt FROM saas_payments p JOIN organizations o ON o.id=p.organization_id WHERE p.organization_id<>'org-nivasbook-demo' ORDER BY p.created_at DESC LIMIT 8`).all();
   res.json({ totals, recent });
 });
 app.get("/api/platform/owners", platformAuth, (_req, res) => {
-  const owners = db.prepare(`SELECT o.id as organizationId,o.name as pgName,o.plan,o.status,o.trial_ends_at as trialEndsAt,o.next_billing_at as nextBillingAt,o.created_at as createdAt,o.notes,u.id as userId,u.name as ownerName,u.email as ownerEmail,u.role,(SELECT COUNT(*) FROM properties p WHERE p.organization_id=o.id) as properties,(SELECT COUNT(*) FROM residents r WHERE r.organization_id=o.id) as residents,(SELECT COALESCE(SUM(amount),0) FROM saas_payments s WHERE s.organization_id=o.id AND s.status='Paid') as lifetimePaid FROM organizations o JOIN users u ON u.id=o.owner_user_id ORDER BY o.created_at DESC`).all();
+  const owners = db.prepare(`SELECT o.id as organizationId,o.name as pgName,o.plan,o.status,o.trial_ends_at as trialEndsAt,o.next_billing_at as nextBillingAt,o.created_at as createdAt,o.notes,u.id as userId,u.name as ownerName,u.email as ownerEmail,u.role,(SELECT COUNT(*) FROM properties p WHERE p.organization_id=o.id) as properties,(SELECT COUNT(*) FROM residents r WHERE r.organization_id=o.id) as residents,(SELECT COALESCE(SUM(amount),0) FROM saas_payments s WHERE s.organization_id=o.id AND s.status='Paid') as lifetimePaid FROM organizations o JOIN users u ON u.id=o.owner_user_id WHERE o.id<>'org-nivasbook-demo' ORDER BY o.created_at DESC`).all();
   res.json({ owners });
 });
 app.get("/api/platform/residents", platformAuth, (_req, res) => {
@@ -3166,6 +3222,11 @@ var safeJsonArray = (s) => {
 };
 var safeNetworkImage = (s) => /^https:\/\/[^\s"'<>]+$/i.test(s) || s.length < 13e5 && /^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(s);
 var safeMarketplaceImage = (s) => safeNetworkImage(s) ? s : "";
+app.get("/api/network/listings", ownerAuth, requireNetworkFeature("public_pg_listing"), (req, res) => {
+  const u = userFor(req);
+  const rows = db.prepare(`SELECT p.id as propertyId,p.name as propertyName,p.name,p.address,p.type,l.slug,l.title,l.description,l.city,l.area,l.public_address as publicAddress,l.gender,l.amenities_json as amenitiesJson,l.house_rules as houseRules,l.photos_json as photosJson,l.monthly_rent as monthlyRent,l.security_deposit as securityDeposit,l.public_phone as publicPhone,l.published,l.featured FROM properties p LEFT JOIN public_property_listings l ON l.property_id=p.id AND l.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.name`).all(u.organizationId);
+  res.json({ listings: rows.map((r) => ({ ...r, slug:r.slug||"", title:r.title||r.propertyName, description:r.description||"", city:r.city||"", area:r.area||"", publicAddress:r.publicAddress||"", gender:r.gender||"Unisex", amenities:safeJsonArray(r.amenitiesJson||"[]"), houseRules:r.houseRules||"", photos:safeJsonArray(r.photosJson||"[]"), monthlyRent:Number(r.monthlyRent||0), securityDeposit:Number(r.securityDeposit||0), publicPhone:r.publicPhone||"", published:Number(r.published||0), featured:Number(r.featured||0), availableBeds:0, availableRooms:0 })) });
+});
 app.put("/api/network/listings/:propertyId", ownerAuth, requireNetworkFeature("public_pg_listing"), (req, res) => {
   const u = userFor(req), p = db.prepare("SELECT id,name,address FROM properties WHERE id=? AND organization_id=?").get(req.params.propertyId, u.organizationId);
   if (!p) return res.status(404).json({ error: "Property not found." });

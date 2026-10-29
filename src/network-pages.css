@@ -98,3 +98,11 @@
 
 /* Full marketplace descriptions and legible owner-facing price and location details. */
 .net-market-body>p{height:auto;max-height:none;overflow:visible;margin:0 0 14px;color:#64756b;font-size:14px;line-height:1.6;white-space:normal}.net-market-meta b{font-size:14px}.net-market-meta span{font-size:13px}.net-market-body>.net-button{min-height:42px;font-size:14px}.page-content .net-market-card p{height:auto;max-height:none;overflow:visible;font-size:16px;line-height:1.65}.page-content .net-market-meta b,.page-content .net-market-meta span{font-size:15px}.net-global-requests{padding:0;background:transparent;border:0;border-radius:0}.net-global-requests>header{padding:0 0 4px}.net-lead-image-empty{height:100%;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:linear-gradient(145deg,#edf3ee,#dfe9e1);color:#6d8977;font-size:12px;font-weight:700}.net-global-lead-card .net-lead-image-empty{position:absolute;inset:0}
+
+/* Keep marketplace price, location and quote actions aligned across variable-length cards. */
+.net-market-card{display:flex;flex-direction:column}
+.net-market-body{flex:1;display:flex;flex-direction:column}
+.net-market-meta{min-height:44px;align-items:flex-start}
+.net-market-meta b{max-width:58%;line-height:1.4}
+.net-market-meta span{max-width:42%;justify-content:flex-end;text-align:right;line-height:1.4}
+.net-market-body>.net-button{margin-top:auto}

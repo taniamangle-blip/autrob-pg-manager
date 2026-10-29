@@ -10,3 +10,11 @@
 
 .na-market-card-actions{display:flex;gap:8px;align-items:center}.na-market-card-actions button{flex:1}.na-market-card-actions .na-delete-listing{background:#fff5f3;color:#a33b34;border:1px solid #f1d5d0;border-radius:7px;padding:9px 12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px}.na-delete-listing:hover{background:#ffebe8}
 
+
+/* Align marketplace image cards and their price, location, and actions consistently. */
+.na-market-card{display:flex;flex-direction:column}
+.na-market-card-body{flex:1;display:flex;flex-direction:column}
+.na-market-card-body>p{flex:1;min-height:72px}
+.na-market-card-meta{min-height:46px;display:flex;flex-direction:column;justify-content:center;gap:4px;margin-bottom:12px}
+.na-market-card-meta b,.na-market-card-meta span{max-width:100%;line-height:1.4}
+.na-market-card-actions{margin-top:auto}
