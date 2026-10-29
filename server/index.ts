@@ -1432,13 +1432,16 @@ app.post("/api/backups/restore", ownerAuth, express.raw({ type: ["application/vn
     await fs.writeFile(uploadedPath, bytes, { flag: "wx" });
     source = new Database(uploadedPath, { readonly: true, fileMustExist: true });
     const integrity = source.pragma("integrity_check", { simple: true });
-    const hasOwnerOrg = !!source.prepare("SELECT 1 FROM organizations WHERE id=?").get(orgId2);
-    const hasOtherOrg = !!source.prepare("SELECT 1 FROM organizations WHERE id<>? LIMIT 1").get(orgId2);
+    const sourceOrganizations = source.prepare("SELECT id,owner_user_id as ownerUserId FROM organizations").all();
+    const sourceOwner = source.prepare("SELECT id,organization_id as organizationId,email FROM users WHERE lower(trim(email))=? AND role='owner' LIMIT 1").get(String(owner.email || "").trim().toLowerCase());
+    const sourceOrgId = String(sourceOwner?.organizationId || "");
+    const sourceOrganization = sourceOrganizations.find((organization) => String(organization.id) === sourceOrgId);
+    const sameOwnerBackup = !!sourceOwner && !!sourceOrganization && String(sourceOrganization.ownerUserId) === String(sourceOwner.id) && sourceOrganizations.length === 1;
     const required = ["properties", "rooms", "beds", "residents", "payments", "expenses"];
     const present = new Set(source.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((x) => x.name));
-    if (integrity !== "ok" || !hasOwnerOrg || hasOtherOrg || required.some((name) => !present.has(name))) {
+    if (integrity !== "ok" || !sameOwnerBackup || required.some((name) => !present.has(name))) {
       source.close(); source = void 0;
-      return res.status(400).json({ error: "This file is not a verified backup for your workspace. No live data was changed." });
+      return res.status(400).json({ error: "This file is not a verified backup for the signed-in owner account. Sign in with the account that created the backup. No live data was changed." });
     }
     const safetyName = `nivasbook-workspace-before-restore-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`, safetyPath = path.join(backupDir, safetyName);
     await db.backup(safetyPath);
@@ -1461,7 +1464,8 @@ app.post("/api/backups/restore", ownerAuth, express.raw({ type: ["application/vn
           const columns = table.current.map((c) => c.name).filter((name) => table.backup.some((b) => b.name === name));
           const select = source.prepare(`SELECT ${columns.map((c) => JSON.stringify(c)).join(",")} FROM ${JSON.stringify(table.name)} WHERE organization_id=?`);
           const insert = db.prepare(`INSERT INTO ${JSON.stringify(table.name)} (${columns.map((c) => JSON.stringify(c)).join(",")}) VALUES (${columns.map(() => "?").join(",")})`);
-          let count = 0; for (const row of select.iterate(orgId2)) { insert.run(...columns.map((c) => row[c])); count++; }
+          const ownerReferenceColumns = new Set(["user_id", "created_by", "updated_by", "actor_id"]);
+          let count = 0; for (const row of select.iterate(sourceOrgId)) { insert.run(...columns.map((c) => c === "organization_id" ? orgId2 : ownerReferenceColumns.has(c) && String(row[c] || "") === String(sourceOwner.id) ? owner.id : row[c])); count++; }
           restoreCounts[table.name] = count;
         }
       })();
