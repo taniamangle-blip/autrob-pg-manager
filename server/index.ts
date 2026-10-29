@@ -659,6 +659,8 @@ CREATE INDEX IF NOT EXISTS booking_leads_org_status_idx ON booking_leads(organiz
 CREATE TABLE IF NOT EXISTS resident_stay_requirements (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', area TEXT NOT NULL, budget INTEGER NOT NULL DEFAULT 0, profession TEXT NOT NULL DEFAULT '', gender TEXT NOT NULL DEFAULT '', preference TEXT NOT NULL DEFAULT '', move_in TEXT NOT NULL DEFAULT '', duration TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'OPEN', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS resident_stay_requirements_status_idx ON resident_stay_requirements(status,created_at);
 CREATE TABLE IF NOT EXISTS resident_enquiry_accounts (phone_key TEXT PRIMARY KEY, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS resident_portal_signups (phone_key TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', password_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS resident_portal_suspensions (phone_key TEXT PRIMARY KEY, suspended INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS resident_stay_quotes (id TEXT PRIMARY KEY, requirement_id TEXT NOT NULL, organization_id TEXT NOT NULL, property_id TEXT NOT NULL, property_name TEXT NOT NULL, listing_title TEXT NOT NULL DEFAULT '', listing_slug TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', area TEXT NOT NULL DEFAULT '', monthly_rent REAL NOT NULL DEFAULT 0, security_deposit REAL NOT NULL DEFAULT 0, room_preference TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'QUOTED', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(requirement_id,organization_id), FOREIGN KEY(requirement_id) REFERENCES resident_stay_requirements(id) ON DELETE CASCADE, FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE);
 CREATE INDEX IF NOT EXISTS resident_stay_quotes_org_idx ON resident_stay_quotes(organization_id,created_at);
 CREATE TABLE IF NOT EXISTS owner_business_inquiries (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', business_name TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'NEW', admin_notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -714,6 +716,22 @@ CREATE TABLE IF NOT EXISTS network_sample_dismissals (organization_id TEXT NOT N
   demoMarket.run("demo-market-bunk-bed", demoOrg, "seed-beds", "Product", "Sample \xB7 Durable hostel bunk bed set", "A sturdy, space-saving metal bunk bed with safety rails, a ladder, and a compact study setup. Example product listing for previewing the marketplace.", "/demo/marketplace-bunk-bed.jpg", 18500, "Starting at", "Pune", "Pune and nearby areas", "Demo Hostel Supply Co.", "", "", "In stock", demoNow, demoNow);
   demoMarket.run("demo-market-bedroom-pack", demoOrg, "seed-furniture", "Product", "Sample \xB7 Furnished PG room starter set", "A practical room setup with two beds, wardrobes, and study desks for a new PG property. Example listing; contact details are intentionally omitted.", "/demo/pg-sample-room.jpg", 42e3, "Starting at", "Pune", "Pune and nearby areas", "Demo Hostel Supply Co.", "", "", "Available to order", demoNow, demoNow);
   demoMarket.run("demo-market-linen-pack", demoOrg, "seed-bedsheets-linen", "Product", "Sample \xB7 Fresh linen starter bundle", "A coordinated starter bundle of durable sheets and pillow covers sized for shared accommodation. Example listing for testing filters and quote requests.", "/demo/marketplace-bunk-bed.jpg", 6800, "Starting at", "Pune", "Ships across India", "Demo Hostel Supply Co.", "", "", "In stock", demoNow, demoNow);
+  const extraSamples = [
+    ["demo-market-beds", "seed-beds", "Product", "Single hostel beds with storage", "Powder-coated single beds with under-bed storage for compact PG rooms.", 7200, "Per Unit", "In stock"],
+    ["demo-market-mattress", "seed-mattresses", "Product", "Medium-firm mattresses", "Durable, easy-clean mattresses suited to daily hostel use.", 4200, "Per Unit", "In stock"],
+    ["demo-market-cctv", "seed-cctv-networking", "Product", "8-camera CCTV starter kit", "Cameras, recorder and cabling for shared entrances and common areas.", 26500, "Starting at", "Available to order"],
+    ["demo-market-water", "seed-geysers-water-purifiers", "Product", "Commercial RO water purifier", "High-capacity water purifier with service support for shared accommodation.", 18900, "Starting at", "Available to order"],
+    ["demo-market-laundry", "seed-laundry-service", "Service", "Weekly linen laundry pickup", "Scheduled pickup, wash, fold and return for bedsheets and towels.", 35, "Per Kg", "Booking open"],
+    ["demo-market-plumbing", "seed-plumbing-services", "Service", "Plumbing repairs and installation", "Tap, shower, leakage and drain repairs with appointment slots.", null, "On Request", "Booking open"],
+    ["demo-market-electrical", "seed-electrical-work", "Service", "Electrical safety inspection", "Room and common-area wiring inspection with a written checklist.", 1800, "Starting at", "Booking open"],
+    ["demo-market-cleaning", "seed-deep-cleaning", "Service", "Move-in deep cleaning", "Room, bathroom and common-area deep cleaning before a new booking.", 2200, "Per Room", "Booking open"],
+    ["demo-market-ac", "seed-ac-service", "Service", "AC servicing and annual maintenance", "Filter cleaning, seasonal service and repair visits for property AC units.", 850, "Per Unit", "Booking open"],
+    ["demo-market-setup", "seed-furniture", "Business Service", "New PG setup consultation", "Room planning, bed capacity layout and furnishing recommendations.", null, "On Request", "Taking enquiries"]
+  ];
+  for (const [id, categoryId, kind, title, description, price, priceType, availability] of extraSamples) {
+    if (!db.prepare("SELECT id FROM marketplace_categories WHERE id=?").get(categoryId)) continue;
+    demoMarket.run(id, demoOrg, categoryId, kind, title, description, "/demo/marketplace-bunk-bed.jpg", price, priceType, "Pune", "Pune and nearby areas", "Autrob Stay Marketplace Demo", "", "", availability, demoNow, demoNow);
+  }
 }
 var ensurePaymentColumns = () => {
   const columns = new Set(db.prepare("PRAGMA table_info(payments)").all().map((c) => String(c.name)));
@@ -774,6 +792,7 @@ var orgId = "org-nivasbook-demo";
 var downloadedWorkspaceBackups = /* @__PURE__ */ new Set();
 var nowIso2 = () => (/* @__PURE__ */ new Date()).toISOString();
 var residentTokenHash = (token) => crypto2.createHash("sha256").update(token).digest("hex");
+var residentSuspended = (phoneKey) => !desktopApp && Boolean(db.prepare("SELECT 1 FROM resident_portal_suspensions WHERE substr(phone_key,-10)=? AND suspended=1").get(String(phoneKey || "").replace(/\D/g, "").slice(-10)));
 var createResidentAccessToken = (residentId, phoneKey) => {
   const token = crypto2.randomBytes(32).toString("base64url"), created = nowIso2(), expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3).toISOString();
   db.prepare("INSERT INTO resident_portal_tokens (token_hash,resident_id,phone_key,expires_at,created_at) VALUES (?,?,?,?,?)").run(residentTokenHash(token), residentId, phoneKey, expires, created);
@@ -892,6 +911,8 @@ var licenseRequiredError = "Your trial or paid plan has ended. Enter an activati
 var auth = (req, res, next) => {
   const u = userFor(req);
   if (!u) return res.status(401).json({ error: "Please sign in to continue." });
+  const accountStatus = db.prepare("SELECT status FROM organizations WHERE id=?").get(u.organizationId)?.status;
+  if (!desktopApp && accountStatus === "Suspended") return res.status(403).json({ error: "This owner account is suspended. Contact platform support." });
   if (requiresPlanActivation(u.organizationId)) return res.status(403).json({ error: licenseRequiredError, code: "LICENSE_REQUIRED" });
   next();
 };
@@ -1537,10 +1558,29 @@ app.post("/api/desktop/restore", desktopAuth, async (req, res) => {
     if (!res.headersSent) res.status(500).json({ error: `Restore failed: ${reason}.${recoveryError ? ` Recovery also failed: ${recoveryError}.` : ""} ${databaseClosed ? "The local service will restart automatically." : "The current database was preserved."}`, requiresRestart: databaseClosed });
   }
 });
+app.post("/api/resident/portal/signup", (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const name = val(req.body?.name, 120), phone = val(req.body?.phone, 30), phoneKey = phone.replace(/\D/g, ""), email = val(req.body?.email, 180).toLowerCase(), password = String(req.body?.password || "");
+  if (name.length < 2 || phoneKey.length < 10 || phoneKey.length > 15 || password.length < 8) return res.status(400).json({ error: "Enter your name, a valid mobile number and a password with at least 8 characters." });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address or leave it blank." });
+  if (residentSuspended(phoneKey)) return res.status(403).json({ error: "This resident account is suspended. Contact support." });
+  const candidates = db.prepare("SELECT id,phone FROM residents WHERE phone<>'' ORDER BY created_at DESC LIMIT 5000").all().filter((r) => String(r.phone || "").replace(/\D/g, "").slice(-10) === phoneKey.slice(-10));
+  if (candidates.length > 1) return res.status(409).json({ error: "This number is linked to more than one resident record. Ask your PG owner to verify the account." });
+  try {
+    const now = nowIso2();
+    if (candidates.length === 1) db.prepare("UPDATE residents SET portal_password_hash=? WHERE id=?").run(hash(password), candidates[0].id);
+    else db.prepare("INSERT INTO resident_portal_signups (phone_key,name,email,password_hash,created_at,updated_at) VALUES (?,?,?,?,?,?)").run(phoneKey, name, email, hash(password), now, now);
+    const token = createResidentAccessToken(candidates[0]?.id || "", phoneKey);
+    res.status(201).json({ accessToken: token, resident: { id: candidates[0]?.id || "", name, email }, accountType: candidates.length ? "resident" : "enquiry" });
+  } catch (e) {
+    res.status(e?.code?.startsWith("SQLITE_CONSTRAINT") ? 409 : 500).json({ error: e?.code?.startsWith("SQLITE_CONSTRAINT") ? "An account with this mobile number already exists. Please sign in." : "Could not create resident account." });
+  }
+});
 app.post("/api/resident/portal/login", (req, res) => {
   const identifier = String(req.body?.identifier || req.body?.email || "").trim().toLowerCase(), password = String(req.body?.password || ""), digits = (v) => String(v || "").replace(/\D/g, "");
   if (!identifier || !password) return res.status(400).json({ error: "Enter the resident email or mobile number and password." });
   const emailLogin = identifier.includes("@"), phoneKey = digits(identifier);
+  if (!emailLogin && phoneKey && residentSuspended(phoneKey)) return res.status(403).json({ error: "This resident account is suspended. Contact support." });
   const candidates = db.prepare("SELECT id,name,email,phone,organization_id as organizationId,portal_password_hash as passwordHash FROM residents WHERE lower(email)=? OR phone<>'' ORDER BY created_at DESC LIMIT 5000").all(emailLogin ? identifier : "");
   const matches = candidates.filter((x) => {
     const phone = digits(x.phone), identity = emailLogin ? String(x.email || "").toLowerCase() === identifier : phoneKey && (phone === phoneKey || phone.length >= 10 && phoneKey.length >= 10 && phone.slice(-10) === phoneKey.slice(-10));
@@ -1556,6 +1596,12 @@ app.post("/api/resident/portal/login", (req, res) => {
     return res.json({ accessToken: token2, resident: { id: resident.id, name: resident.name, email: resident.email }, accountType: "resident" });
   }
   if (emailLogin || !phoneKey) return res.status(401).json({ error: "Resident email/phone or password is incorrect." });
+  const registered = db.prepare("SELECT name,email,password_hash as passwordHash FROM resident_portal_signups WHERE phone_key=?").get(phoneKey);
+  if (registered) {
+    if (!bcrypt2.compareSync(password, registered.passwordHash)) return res.status(401).json({ error: "Resident phone or password is incorrect." });
+    const token = createResidentAccessToken("", phoneKey);
+    return res.json({ accessToken: token, resident: { id: "", name: registered.name, email: registered.email }, accountType: "enquiry" });
+  }
   const enquiries = db.prepare("SELECT name,phone FROM resident_stay_requirements ORDER BY created_at DESC").all().filter((x) => digits(x.phone) === phoneKey);
   if (!enquiries.length) return res.status(401).json({ error: "No stay enquiry is registered with this phone number. Submit an enquiry first, then sign in using the phone number as username and initial password." });
   let account = db.prepare("SELECT password_hash as passwordHash FROM resident_enquiry_accounts WHERE phone_key=?").get(phoneKey);
@@ -1574,6 +1620,9 @@ app.get("/api/resident/portal/session", (req, res) => {
   if (resident) return res.json({ resident, accountType: "resident" });
   const phoneKey = auth2.phoneKey;
   if (!phoneKey) return res.json({ resident: null, accountType: null });
+  if (residentSuspended(phoneKey)) return res.json({ resident: null, accountType: null });
+  const registered = db.prepare("SELECT name,email FROM resident_portal_signups WHERE phone_key=?").get(phoneKey);
+  if (registered) return res.json({ resident: { id: "", name: registered.name, email: registered.email }, accountType: "enquiry" });
   const enquiry = db.prepare("SELECT name FROM resident_stay_requirements ORDER BY created_at DESC").all().find((r) => String(r.phone || "").replace(/\D/g, "") === phoneKey);
   if (!enquiry) return res.json({ resident: null, accountType: null });
   res.json({ resident: { id: "", name: enquiry.name, email: "" }, accountType: "enquiry" });
@@ -1600,6 +1649,12 @@ app.post("/api/resident/portal/password", (req, res) => {
   }
   const phoneKey = auth2.phoneKey;
   if (!phoneKey) return res.status(401).json({ error: "Resident sign-in is required." });
+  const registered = db.prepare("SELECT password_hash as passwordHash FROM resident_portal_signups WHERE phone_key=?").get(phoneKey);
+  if (registered) {
+    if (!bcrypt2.compareSync(current, String(registered.passwordHash || ""))) return res.status(400).json({ error: "Current password is incorrect." });
+    db.prepare("UPDATE resident_portal_signups SET password_hash=?,updated_at=? WHERE phone_key=?").run(hash(next), nowIso2(), phoneKey);
+    return res.json({ ok: true });
+  }
   const account = db.prepare("SELECT password_hash as passwordHash FROM resident_enquiry_accounts WHERE phone_key=?").get(phoneKey);
   if (!account || !bcrypt2.compareSync(current, String(account.passwordHash || ""))) return res.status(400).json({ error: "Current password is incorrect." });
   db.prepare("UPDATE resident_enquiry_accounts SET password_hash=?,updated_at=? WHERE phone_key=?").run(hash(next), nowIso2(), phoneKey);
@@ -1622,12 +1677,17 @@ var currentPortalRentInvoice = (resident, payments) => {
 };
 app.get("/api/resident/portal/dashboard", (req, res) => {
   const auth2 = residentPortalIdentity(req), id = auth2.residentId;
+  if (residentSuspended(auth2.phoneKey)) return res.status(403).json({ error: "This resident account is suspended. Contact support." });
   const resident = id ? db.prepare("SELECT id,organization_id as organizationId,name,email,phone,property,room,rent,address,company_name as companyName,security_deposit as securityDeposit,stay_type as stayType,move_in_date as moveIn,check_out_date as checkOutDate,occupancy_status as occupancyStatus,exit_date as exitDate,status,due,rent_paid_through_period as paidThroughPeriod,joined FROM residents WHERE id=?").get(id) : null;
   if (!resident) {
     const phoneKey = auth2.phoneKey;
     if (!phoneKey) return res.status(401).json({ error: "Resident sign-in is required." });
     const stayRequirements2 = db.prepare("SELECT * FROM resident_stay_requirements ORDER BY created_at DESC LIMIT 1000").all().filter((r) => String(r.phone || "").replace(/\D/g, "") === phoneKey).slice(0, 100);
-    if (!stayRequirements2.length) return res.status(404).json({ error: "No enquiries were found for this resident account." });
+    if (!stayRequirements2.length) {
+      const registered = db.prepare("SELECT name,email FROM resident_portal_signups WHERE phone_key=?").get(phoneKey);
+      if (!registered) return res.status(404).json({ error: "No enquiries were found for this resident account." });
+      return res.json({ resident: { id: "", name: registered.name, email: registered.email, phone: phoneKey, property: "No confirmed stay", room: "", rent: 0, securityDeposit: 0, stayType: "—", moveIn: "", checkOutDate: "", occupancyStatus: "No confirmed stay", exitDate: "", status: "", due: "" }, payments: [], electricityBills: [], foodBills: [], messages: [], bookings: [], invoices: [], invoiceSettings: null, stayRequirements: [], stayOffers: [], accountType: "enquiry" });
+    }
     const stayOffers2 = stayRequirements2.flatMap((r) => db.prepare("SELECT q.*,l.photos_json as currentPhotos FROM resident_stay_quotes q LEFT JOIN public_property_listings l ON l.property_id=q.property_id WHERE q.requirement_id=? ORDER BY q.created_at DESC").all(r.id).map((q) => ({ ...q, requirementId: r.id, requirementArea: r.area, photos: safeJsonArray(q.currentPhotos || "[]") })));
     return res.json({ resident: { id: "", name: stayRequirements2[0].name, email: "", phone: phoneKey, property: "Enquiry account", room: "", rent: 0, securityDeposit: 0, stayType: "Enquiry", moveIn: "", checkOutDate: "", occupancyStatus: "No confirmed stay", exitDate: "", status: "", due: "" }, payments: [], electricityBills: [], foodBills: [], messages: [], bookings: [], invoices: [], invoiceSettings: null, stayRequirements: stayRequirements2, stayOffers: stayOffers2, accountType: "enquiry" });
   }
@@ -1647,6 +1707,8 @@ app.post("/api/auth/login", (req, res) => {
   const password = String(req.body?.password || "");
   const defaultOwnerLogin = desktopApp && email === defaultEmail;
   const user = defaultOwnerLogin ? db.prepare("SELECT u.* FROM organizations o JOIN users u ON u.id=o.owner_user_id WHERE o.id=?").get(desktopWorkspaceOrgId) : db.prepare("SELECT * FROM users WHERE email=?").get(email);
+  const ownerStatus = user ? db.prepare("SELECT status FROM organizations WHERE id=?").get(user.organization_id)?.status : "";
+  if (!desktopApp && ownerStatus === "Suspended") return res.status(403).json({ error: "This owner account is suspended. Contact platform support." });
   if (!user || !bcrypt2.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: desktopApp ? "This Windows app uses a local account. Select Fill local sign-in details; website login credentials do not work here." : "Email or password is incorrect." });
   }
@@ -1655,6 +1717,28 @@ app.post("/api/auth/login", (req, res) => {
     req.session.userId = user.id;
     res.json({ user: { id: user.id, name: user.name, email: user.email } });
   });
+});
+app.post("/api/auth/signup", (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const name = val(req.body?.name, 100), pgName = val(req.body?.pgName, 180), email = val(req.body?.email, 180).toLowerCase(), password = String(req.body?.password || "");
+  if (name.length < 2 || pgName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 10) return res.status(400).json({ error: "Enter your name, PG/business name, valid email and a password with at least 10 characters." });
+  const organizationId = `org-${uid2()}`, userId = uid2(), now = nowIso2(), start = new Date().toISOString().slice(0, 10), end = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10), trialId = uid2(), subscriptionId = uid2();
+  try {
+    db.transaction(() => {
+      db.prepare("INSERT INTO users (id,name,email,password_hash,organization_id,role) VALUES (?,?,?,?,?,'owner')").run(userId, name, email, hash(password), organizationId);
+      db.prepare("INSERT INTO organizations (id,name,owner_user_id,plan,status,trial_ends_at,created_at,notes) VALUES (?,?,?,'Trial','Trial',?,?,?)").run(organizationId, pgName, userId, end, now, "Self-registered from website");
+      db.prepare("INSERT INTO org_settings (organization_id,business_name) VALUES (?,?)").run(organizationId, pgName);
+      db.prepare("INSERT INTO commercial_trials (trial_id,customer_id,business_id,trial_start_date,trial_end_date,trial_status,created_at,updated_at) VALUES (?,?,?,?,?,'ACTIVE',?,?)").run(trialId, userId, organizationId, start, end, now, now);
+      db.prepare("INSERT INTO commercial_subscriptions (subscription_id,customer_id,business_id,plan_code,plan_name_snapshot,billing_cycle,subscription_status,start_date,end_date,trial_start_date,trial_end_date,payment_status,pricing_snapshot_json,created_at,updated_at) VALUES (?,?,?,'PRO','PRO','CUSTOM','TRIAL',?,?,?,?,'Not required','{}',?,?)").run(subscriptionId, userId, organizationId, start, end, start, end, now, now);
+    })();
+    req.session.regenerate((err) => {
+      if (err) return res.status(500).json({ error: "Account created, but the session could not start. Please sign in." });
+      req.session.userId = userId;
+      res.status(201).json({ user: { id: userId, name, email }, trialEndsAt: end });
+    });
+  } catch (e) {
+    res.status(e?.code?.startsWith("SQLITE_CONSTRAINT") ? 409 : 500).json({ error: e?.code?.startsWith("SQLITE_CONSTRAINT") ? "This email already has an account. Please sign in." : "Could not create owner account." });
+  }
 });
 app.get("/api/platform/session", (req, res) => {
   const admin = platformUserFor(req);
@@ -1857,6 +1941,24 @@ app.get("/api/platform/overview", platformAuth, (_req, res) => {
 app.get("/api/platform/owners", platformAuth, (_req, res) => {
   const owners = db.prepare(`SELECT o.id as organizationId,o.name as pgName,o.plan,o.status,o.trial_ends_at as trialEndsAt,o.next_billing_at as nextBillingAt,o.created_at as createdAt,o.notes,u.id as userId,u.name as ownerName,u.email as ownerEmail,u.role,(SELECT COUNT(*) FROM properties p WHERE p.organization_id=o.id) as properties,(SELECT COUNT(*) FROM residents r WHERE r.organization_id=o.id) as residents,(SELECT COALESCE(SUM(amount),0) FROM saas_payments s WHERE s.organization_id=o.id AND s.status='Paid') as lifetimePaid FROM organizations o JOIN users u ON u.id=o.owner_user_id ORDER BY o.created_at DESC`).all();
   res.json({ owners });
+});
+app.get("/api/platform/residents", platformAuth, (_req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const rows = db.prepare(`SELECT r.name,r.phone,r.email,r.property,r.room,r.stay_type as stayType,r.occupancy_status as occupancyStatus,r.joined,r.organization_id as organizationId,o.name as workspace,u.name as ownerName FROM residents r LEFT JOIN organizations o ON o.id=r.organization_id LEFT JOIN users u ON u.id=o.owner_user_id WHERE r.phone<>'' ORDER BY r.created_at DESC LIMIT 3000`).all();
+  const inquiries = db.prepare("SELECT name,phone,email,area,created_at as joined FROM resident_stay_requirements ORDER BY created_at DESC LIMIT 1000").all();
+  const signups = db.prepare("SELECT name,phone_key as phone,email,created_at as joined FROM resident_portal_signups ORDER BY created_at DESC LIMIT 1000").all();
+  const latest = new Map();
+  for (const row of [...rows, ...inquiries, ...signups]) { const phone = String(row.phone || "").replace(/\D/g, ""); if (phone) { const prior = latest.get(phone) || {}; latest.set(phone, { ...prior, ...row, phone }); } }
+  const suspended = db.prepare("SELECT phone_key FROM resident_portal_suspensions WHERE suspended=1").all();
+  const suspendedSet = new Set(suspended.map((x) => x.phone_key));
+  res.json({ residents: [...latest.entries()].map(([phone, row]) => ({ ...row, suspended: suspendedSet.has(phone) })).sort((a, b) => String(b.joined || "").localeCompare(String(a.joined || ""))) });
+});
+app.patch("/api/platform/residents/:phone/suspension", platformAuth, (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const phone = String(req.params.phone || "").replace(/\D/g, "");
+  if (phone.length < 10 || typeof req.body?.suspended !== "boolean") return res.status(400).json({ error: "Choose a valid resident and suspension state." });
+  db.prepare("INSERT INTO resident_portal_suspensions (phone_key,suspended,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(phone_key) DO UPDATE SET suspended=excluded.suspended,updated_at=excluded.updated_at,updated_by=excluded.updated_by").run(phone, req.body.suspended ? 1 : 0, nowIso2(), platformUserFor(req).id);
+  res.json({ ok: true });
 });
 app.post("/api/platform/owners", platformAuth, (req, res) => {
   const b = req.body || {}, ownerName = val(b.ownerName, 100), pgName = val(b.pgName, 180), email = val(b.email, 180).toLowerCase(), password = String(b.password || ""), plan = val(b.plan, 30) || "Trial";
@@ -3272,6 +3374,17 @@ app.patch("/api/platform/network/marketplace/listings/:id", platformAuth, (req, 
   const r = db.prepare(`UPDATE marketplace_listings SET category_id=?,kind=?,title=?,description=?,image_url=?,price=?,price_type=?,city=?,service_area=?,seller=?,phone=?,whatsapp=?,availability=?,status=?,featured=?,updated_at=? WHERE id=?`).run(categoryId, ["Product", "Service", "Manpower", "Business Service"].includes(b.kind) ? b.kind : "Product", title, val(b.description, 3e3), safeMarketplaceImage(val(b.imageUrl, 4e3)), Number.isFinite(Number(b.price)) && Number(b.price) >= 0 ? Number(b.price) : null, val(b.priceType, 30) || "On Request", val(b.city, 100), val(b.serviceArea, 160), val(b.seller, 150), val(b.phone, 30), val(b.whatsapp, 30), val(b.availability, 100) || "Available", b.active === false ? "Inactive" : "Active", b.featured ? 1 : 0, nowIso2(), req.params.id);
   if (!r.changes) return res.status(404).json({ error: "Listing not found." });
   res.json({ ok: true });
+});
+app.delete("/api/platform/network/marketplace/listings/:id", platformAuth, (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const listing = db.prepare("SELECT id,organization_id as organizationId,title FROM marketplace_listings WHERE id=?").get(req.params.id);
+  if (!listing) return res.status(404).json({ error: "Marketplace listing not found." });
+  db.transaction(() => {
+    db.prepare("DELETE FROM marketplace_enquiries WHERE listing_id=?").run(listing.id);
+    db.prepare("DELETE FROM marketplace_listings WHERE id=?").run(listing.id);
+  })();
+  if (listing.organizationId) audit(listing.organizationId, platformUserFor(req).id, "marketplace_listing.deleted", "marketplace_listing", listing.id);
+  res.json({ ok: true, title: listing.title });
 });
 app.post("/api/platform/network/community", platformAuth, (req, res) => {
   const admin = platformUserFor(req), b = req.body || {}, title = val(b.title, 180), body = val(b.body, 5e3);
