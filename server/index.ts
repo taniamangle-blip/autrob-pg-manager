@@ -1353,6 +1353,7 @@ app.post("/api/backups", ownerAuth, async (req, res) => {
         for (const { name: table } of tables) {
           const columns = snapshot.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all();
           if (columns.some((column) => column.name === "organization_id")) snapshot.prepare(`DELETE FROM ${JSON.stringify(table)} WHERE organization_id<>?`).run(orgId2);
+          else if (table === "organizations") snapshot.prepare("DELETE FROM organizations WHERE id<>?").run(orgId2);
           else if (table === "platform_admins") snapshot.prepare("DELETE FROM platform_admins").run();
         }
       });
@@ -1433,10 +1434,13 @@ app.post("/api/backups/restore", ownerAuth, express.raw({ type: ["application/vn
     source = new Database(uploadedPath, { readonly: true, fileMustExist: true });
     const integrity = source.pragma("integrity_check", { simple: true });
     const sourceOrganizations = source.prepare("SELECT id,owner_user_id as ownerUserId FROM organizations").all();
-    const sourceOwner = source.prepare("SELECT id,organization_id as organizationId,email FROM users WHERE lower(trim(email))=? AND role='owner' LIMIT 1").get(String(owner.email || "").trim().toLowerCase());
+    // Older backups may predate the explicit role column or may still label the
+    // workspace owner as a manager. The ownership relation in organizations is
+    // authoritative; the signed-in email must still match exactly.
+    const sourceOwner = source.prepare("SELECT id,organization_id as organizationId,email FROM users WHERE lower(trim(email))=? LIMIT 1").get(String(owner.email || "").trim().toLowerCase());
     const sourceOrgId = String(sourceOwner?.organizationId || "");
     const sourceOrganization = sourceOrganizations.find((organization) => String(organization.id) === sourceOrgId);
-    const sameOwnerBackup = !!sourceOwner && !!sourceOrganization && String(sourceOrganization.ownerUserId) === String(sourceOwner.id) && sourceOrganizations.length === 1;
+    const sameOwnerBackup = !!sourceOwner && !!sourceOrganization && String(sourceOrganization.ownerUserId) === String(sourceOwner.id);
     const required = ["properties", "rooms", "beds", "residents", "payments", "expenses"];
     const present = new Set(source.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((x) => x.name));
     if (integrity !== "ok" || !sameOwnerBackup || required.some((name) => !present.has(name))) {
