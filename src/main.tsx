@@ -4,6 +4,7 @@ import App from './App';
 import PlatformAdmin from './PlatformAdmin';
 import NetworkPages from './NetworkPages';
 import OwnerSignup from './OwnerSignup';
+import PasswordResetPage from './PasswordReset';
 import './styles.css';
 import './login.css';
 import './platform-admin.css';
@@ -38,6 +39,6 @@ class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { 
 }
 
 const webNetworkPath=/^\/(resident|stay|find-a-pg|start-business|how-it-works|about|faqs|contact|privacy|terms|marketplace|booking-leads|public-listings)(\/|$)/.test(window.location.pathname)&&!window.autrobDesktop?.isDesktop;
-const application=window.location.pathname==='/platform/network'||window.location.pathname==='/platform'?<PlatformAdmin/>:window.location.pathname==='/owner/signup'&&!window.autrobDesktop?.isDesktop?<OwnerSignup/>:webNetworkPath?<NetworkPages/>:<App/>;
+const application=window.location.pathname==='/platform/network'||window.location.pathname==='/platform'?<PlatformAdmin/>:window.location.pathname==='/owner/signup'&&!window.autrobDesktop?.isDesktop?<OwnerSignup/>:window.location.pathname==='/password-reset'&&!window.autrobDesktop?.isDesktop?<PasswordResetPage kind="owner"/>:webNetworkPath?<NetworkPages/>:<App/>;
 document.documentElement.dataset.nivasbookReady = 'true';
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AppErrorBoundary>{application}</AppErrorBoundary></React.StrictMode>);

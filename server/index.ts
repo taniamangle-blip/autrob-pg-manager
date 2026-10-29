@@ -623,6 +623,18 @@ CREATE INDEX IF NOT EXISTS owner_wallet_transactions_org_date_idx ON owner_walle
 CREATE TABLE IF NOT EXISTS owner_wallet_recharge_requests (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, amount_paise INTEGER NOT NULL CHECK(amount_paise>0), note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','APPROVED','REJECTED')), reviewed_by TEXT NOT NULL DEFAULT '', reviewed_at TEXT NOT NULL DEFAULT '', transaction_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS saas_licenses (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, key_hint TEXT NOT NULL, plan TEXT NOT NULL, starts_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Issued', activated_by TEXT NOT NULL DEFAULT '', activated_at TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL, created_at TEXT NOT NULL, revoked_at TEXT NOT NULL DEFAULT '', FOREIGN KEY(organization_id) REFERENCES organizations(id));
 CREATE TABLE IF NOT EXISTS owner_business_inquiries (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', business_name TEXT NOT NULL DEFAULT '', property_count INTEGER NOT NULL DEFAULT 1, property_type TEXT NOT NULL DEFAULT '', room_count INTEGER NOT NULL DEFAULT 0, bed_count INTEGER NOT NULL DEFAULT 0, setup_status TEXT NOT NULL DEFAULT '', area TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '', pincode TEXT NOT NULL DEFAULT '', country TEXT NOT NULL DEFAULT 'India', message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'NEW', admin_notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS partner_applications (id TEXT PRIMARY KEY, name TEXT NOT NULL, date_of_birth TEXT NOT NULL, qualification TEXT NOT NULL, phone_key TEXT NOT NULL UNIQUE, email TEXT NOT NULL, address TEXT NOT NULL, city TEXT NOT NULL, state TEXT NOT NULL, pincode TEXT NOT NULL, password_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','APPROVED','REJECTED','SUSPENDED')), admin_notes TEXT NOT NULL DEFAULT '', reviewed_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS partner_applications_status_idx ON partner_applications(status,created_at DESC);
+CREATE TABLE IF NOT EXISTS partner_portal_tokens (token_hash TEXT PRIMARY KEY, partner_id TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(partner_id) REFERENCES partner_applications(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS partner_clients (id TEXT PRIMARY KEY, partner_id TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', business_name TEXT NOT NULL DEFAULT '', area TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL DEFAULT 'POTENTIAL' CHECK(stage IN ('POTENTIAL','CONTACTED','FOLLOW_UP','CONVERTED')), notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(partner_id) REFERENCES partner_applications(id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS partner_clients_partner_idx ON partner_clients(partner_id,updated_at DESC);
+CREATE TABLE IF NOT EXISTS partner_payouts (id TEXT PRIMARY KEY, partner_id TEXT NOT NULL, amount_paise INTEGER NOT NULL CHECK(amount_paise>0), period TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'UPCOMING' CHECK(status IN ('UPCOMING','PAID','CANCELLED')), note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(partner_id) REFERENCES partner_applications(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS resident_wallet_transactions (id TEXT PRIMARY KEY, resident_id TEXT NOT NULL DEFAULT '', phone_key TEXT NOT NULL DEFAULT '', direction TEXT NOT NULL CHECK(direction IN ('CREDIT','DEBIT')), amount_paise INTEGER NOT NULL CHECK(amount_paise>0), description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS resident_wallet_owner_idx ON resident_wallet_transactions(resident_id,phone_key,created_at DESC);
+CREATE TABLE IF NOT EXISTS resident_portal_maintenance (id TEXT PRIMARY KEY, resident_id TEXT NOT NULL DEFAULT '', phone_key TEXT NOT NULL DEFAULT '', organization_id TEXT NOT NULL DEFAULT '', resident_name TEXT NOT NULL, property TEXT NOT NULL DEFAULT '', room TEXT NOT NULL DEFAULT '', title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT 'Normal', status TEXT NOT NULL DEFAULT 'NEW', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS resident_portal_maintenance_resident_idx ON resident_portal_maintenance(resident_id,phone_key,created_at DESC);
+CREATE TABLE IF NOT EXISTS password_reset_tokens (token_hash TEXT PRIMARY KEY, account_type TEXT NOT NULL CHECK(account_type IN ('OWNER','RESIDENT')), account_key TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS password_reset_account_idx ON password_reset_tokens(account_type,account_key,created_at DESC);
 `);
 var desktopMasterColumns = new Set(db.prepare("PRAGMA table_info(desktop_master_license)").all().map((column) => column.name));
 if (!desktopMasterColumns.has("expires_at")) db.exec("ALTER TABLE desktop_master_license ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
@@ -941,6 +953,38 @@ var safeEqual = (a, b) => {
 var platformAuth = (req, res, next) => {
   if (!platformUserFor(req)) return res.status(401).json({ error: "Platform admin sign-in is required." });
   next();
+};
+var partnerIdentity = (req) => {
+  const header = String(req.get("authorization") || ""), token = header.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+  if (token) {
+    const row = db.prepare("SELECT partner_id as partnerId FROM partner_portal_tokens WHERE token_hash=? AND expires_at>? ").get(residentTokenHash(token), nowIso2());
+    if (row) return String(row.partnerId || "");
+  }
+  return "";
+};
+var partnerAuth = (req, res, next) => {
+  const partnerId = partnerIdentity(req), row = partnerId ? db.prepare("SELECT id,status FROM partner_applications WHERE id=?").get(partnerId) : null;
+  if (!row || row.status !== "APPROVED") return res.status(401).json({ error: row?.status === "SUSPENDED" ? "Partner access is suspended. Contact platform support." : "Approved partner sign-in is required." });
+  req.partnerId = partnerId;
+  next();
+};
+var passwordResetAvailable = (channel) => channel === "email" ? Boolean(process.env.SENDGRID_API_KEY && process.env.PASSWORD_RESET_FROM) : Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER);
+var sendPasswordResetLink = async (channel, recipient, link) => {
+  if (channel === "email") {
+    const response = await fetch("https://api.sendgrid.com/v3/mail/send", { method: "POST", headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ personalizations: [{ to: [{ email: recipient }] }], from: { email: process.env.PASSWORD_RESET_FROM }, subject: "Reset your Autrob Stay password", content: [{ type: "text/plain", value: `Use this one-time link to reset your password. It expires in 30 minutes.\n\n${link}\n\nIf you did not request a reset, you can ignore this email.` }, { type: "text/html", value: `<p>Use this one-time link to reset your Autrob Stay password. It expires in 30 minutes.</p><p><a href="${link}">Reset password</a></p><p>If you did not request a reset, you can ignore this email.</p>` }] }) });
+    if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+    return;
+  }
+  const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString("base64"), body = new URLSearchParams({ To: recipient.startsWith("+") ? recipient : `+${recipient}`, From: process.env.TWILIO_FROM_NUMBER, Body: `Reset your Autrob Stay password using this one-time link (expires in 30 minutes): ${link}` });
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, { method: "POST", headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" }, body });
+  if (!response.ok) throw new Error(`SMS provider returned ${response.status}`);
+};
+var issuePasswordReset = async (req, channel, recipient, accountType, accountKey, route) => {
+  const token = crypto2.randomBytes(32).toString("base64url"), tokenHash = residentTokenHash(token), now = nowIso2(), expires = new Date(Date.now() + 30 * 60 * 1e3).toISOString();
+  db.prepare("DELETE FROM password_reset_tokens WHERE account_type=? AND account_key=?").run(accountType, accountKey);
+  db.prepare("INSERT INTO password_reset_tokens (token_hash,account_type,account_key,expires_at,created_at) VALUES (?,?,?,?,?)").run(tokenHash, accountType, accountKey, expires, now);
+  const origin = String(process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, ""), link = `${origin}${route}?token=${encodeURIComponent(token)}`;
+  await sendPasswordResetLink(channel, recipient, link);
 };
 var ensureOwnerWallet = (organizationId) => db.prepare("INSERT OR IGNORE INTO owner_wallets (organization_id,balance_paise,updated_at) VALUES (?,0,?)").run(organizationId, nowIso2());
 var walletBalance = (organizationId) => Number(db.prepare("SELECT balance_paise FROM owner_wallets WHERE organization_id=?").get(organizationId)?.balance_paise || 0);
@@ -1716,6 +1760,48 @@ app.post("/api/resident/portal/password", (req, res) => {
   db.prepare("UPDATE resident_enquiry_accounts SET password_hash=?,updated_at=? WHERE phone_key=?").run(hash(next), nowIso2(), phoneKey);
   res.json({ ok: true });
 });
+app.post("/api/resident/portal/password-reset/request", async (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const identifier = String(req.body?.identifier || "").trim(), digitsOnly = identifier.replace(/\D/g, ""), phoneKey = digitsOnly.length >= 10 ? digitsOnly : "", email = identifier.toLowerCase();
+  if (!passwordResetAvailable("email") && !passwordResetAvailable("sms")) return res.status(503).json({ error: "Password reset delivery is not configured yet. Contact your PG/Hostel owner or Autrob Stay support." });
+  let account = null, channel = "email", recipient = "", accountKey = "";
+  const residentRows = db.prepare("SELECT id,phone,email FROM residents WHERE phone<>'' ORDER BY created_at DESC LIMIT 5000").all();
+  const resident = residentRows.find((r) => email.includes("@") && String(r.email || "").toLowerCase() === email || phoneKey && String(r.phone || "").replace(/\D/g, "").slice(-10) === phoneKey.slice(-10));
+  if (resident) { account = resident; accountKey = resident.id; recipient = String(resident.email || "").trim(); if (!recipient && passwordResetAvailable("sms")) { channel = "sms"; recipient = String(resident.phone || "").replace(/\D/g, ""); } }
+  if (!account && email.includes("@")) {
+    const signup = db.prepare("SELECT phone_key as phone,email FROM resident_portal_signups WHERE lower(email)=?").get(email);
+    if (signup) { accountKey = signup.phone; recipient = String(signup.email || ""); }
+    else {
+      const enquiry = db.prepare("SELECT phone,email FROM resident_stay_requirements WHERE lower(email)=? ORDER BY created_at DESC LIMIT 1").get(email);
+      if (enquiry) { accountKey = String(enquiry.phone || "").replace(/\D/g, ""); recipient = String(enquiry.email || ""); }
+    }
+  }
+  if (!account && phoneKey) {
+    const signupRows = db.prepare("SELECT phone_key as phone,email FROM resident_portal_signups").all(), signup = signupRows.find((r) => String(r.phone).replace(/\D/g, "").slice(-10) === phoneKey.slice(-10));
+    if (signup) { accountKey = signup.phone; recipient = String(signup.email || "").trim(); }
+    else {
+      const enquiry = db.prepare("SELECT phone FROM resident_stay_requirements ORDER BY created_at DESC LIMIT 1000").all().find((r) => String(r.phone || "").replace(/\D/g, "").slice(-10) === phoneKey.slice(-10));
+      const enquiryAccount = db.prepare("SELECT phone_key as phone FROM resident_enquiry_accounts").all().find((r) => String(r.phone).replace(/\D/g, "").slice(-10) === phoneKey.slice(-10));
+      if (enquiry || enquiryAccount) accountKey = String(enquiryAccount?.phone || String(enquiry.phone || "").replace(/\D/g, ""));
+    }
+  }
+  if (!accountKey) return res.json({ message: "If a resident account matches those details, password reset instructions will be sent." });
+  if (!recipient && passwordResetAvailable("sms")) { channel = "sms"; recipient = phoneKey || String(account?.phone || "").replace(/\D/g, ""); }
+  if (!recipient || !passwordResetAvailable(channel)) return res.status(503).json({ error: "No verified email or SMS delivery is configured for this resident account. Contact your PG/Hostel owner." });
+  try { await issuePasswordReset(req, channel, recipient, "RESIDENT", accountKey, "/resident/reset-password"); res.json({ message: "If a resident account matches those details, password reset instructions will be sent." }); }
+  catch (error) { console.error("Resident password reset delivery failed:", error instanceof Error ? error.message : "unknown error"); res.status(502).json({ error: "Could not send reset instructions. Try again later or contact your PG/Hostel owner." }); }
+});
+app.post("/api/resident/portal/password-reset/confirm", (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const token = String(req.body?.token || ""), password = String(req.body?.password || ""), confirm = String(req.body?.confirmPassword || "");
+  if (password.length < 8) return res.status(400).json({ error: "Use a password with at least 8 characters." });
+  if (password !== confirm) return res.status(400).json({ error: "The new password and confirmation do not match." });
+  const row = db.prepare("SELECT account_key as accountKey FROM password_reset_tokens WHERE token_hash=? AND account_type='RESIDENT' AND used_at='' AND expires_at>?").get(residentTokenHash(token), nowIso2());
+  if (!row) return res.status(400).json({ error: "This reset link is invalid or expired. Request a new link." });
+  const resident = db.prepare("SELECT id FROM residents WHERE id=?").get(row.accountKey), signup = resident ? null : db.prepare("SELECT phone_key as phone FROM resident_portal_signups WHERE phone_key=?").get(row.accountKey), now = nowIso2();
+  const update = db.transaction(() => { if (resident) db.prepare("UPDATE residents SET portal_password_hash=? WHERE id=?").run(hash(password), row.accountKey); else if (signup) db.prepare("UPDATE resident_portal_signups SET password_hash=?,updated_at=? WHERE phone_key=?").run(hash(password), now, row.accountKey); else db.prepare("INSERT INTO resident_enquiry_accounts (phone_key,password_hash,created_at,updated_at) VALUES (?,?,?,?) ON CONFLICT(phone_key) DO UPDATE SET password_hash=excluded.password_hash,updated_at=excluded.updated_at").run(row.accountKey, hash(password), now, now); db.prepare("UPDATE password_reset_tokens SET used_at=? WHERE account_type='RESIDENT' AND account_key=?").run(now, row.accountKey); });
+  update(); res.json({ ok: true, message: "Resident password reset successfully. Sign in with your new password." });
+});
 var currentPortalRentInvoice = (resident, payments) => {
   if (resident.stayType !== "Monthly" || resident.occupancyStatus === "Exited") return null;
   const today = /* @__PURE__ */ new Date(), period = String(today.getFullYear()) + "-" + String(today.getMonth() + 1).padStart(2, "0"), start = dateOnly(resident.moveIn || resident.joined), end = dateOnly(resident.exitDate || resident.checkOutDate);
@@ -1731,6 +1817,31 @@ var currentPortalRentInvoice = (resident, payments) => {
   const dueDate = new Date(today.getFullYear(), today.getMonth(), Math.min(start.getDate(), new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()), 12), todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12), periodDate = new Date(today.getFullYear(), today.getMonth(), 1);
   return { id: "virtual-rent:" + period, type: "Monthly rent", date: dueDate.toISOString().slice(0, 10), amount, status: dueDate < todayStart ? "Overdue" : "Pending", reference: "", detail: periodDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" }), dueAmount: amount };
 };
+app.get("/api/resident/portal/wallet", (req, res) => {
+  const auth2 = residentPortalIdentity(req), id = auth2.residentId, phoneKey = String(auth2.phoneKey || "").replace(/\D/g, "");
+  if (!id && !phoneKey) return res.status(401).json({ error: "Resident sign-in is required." });
+  const rows = id ? db.prepare("SELECT id,direction,amount_paise as amountPaise,description,created_at as createdAt FROM resident_wallet_transactions WHERE resident_id=? ORDER BY created_at DESC LIMIT 200").all(id) : db.prepare("SELECT id,direction,amount_paise as amountPaise,description,created_at as createdAt FROM resident_wallet_transactions WHERE resident_id='' AND phone_key=? ORDER BY created_at DESC LIMIT 200").all(phoneKey);
+  const balancePaise = rows.reduce((sum, row) => sum + (row.direction === "CREDIT" ? 1 : -1) * Number(row.amountPaise || 0), 0);
+  res.json({ balance: Math.max(0, balancePaise) / 100, transactions: rows.map((row) => ({ ...row, amount: Number(row.amountPaise || 0) / 100 })) });
+});
+app.get("/api/resident/portal/maintenance", (req, res) => {
+  const auth2 = residentPortalIdentity(req), id = auth2.residentId, phoneKey = String(auth2.phoneKey || "").replace(/\D/g, "");
+  if (!id && !phoneKey) return res.status(401).json({ error: "Resident sign-in is required." });
+  const requests = id ? db.prepare("SELECT id,title,description,priority,status,created_at as createdAt,updated_at as updatedAt FROM resident_portal_maintenance WHERE resident_id=? ORDER BY created_at DESC LIMIT 100").all(id) : db.prepare("SELECT id,title,description,priority,status,created_at as createdAt,updated_at as updatedAt FROM resident_portal_maintenance WHERE resident_id='' AND phone_key=? ORDER BY created_at DESC LIMIT 100").all(phoneKey);
+  res.json({ requests });
+});
+app.post("/api/resident/portal/maintenance", (req, res) => {
+  const auth2 = residentPortalIdentity(req), id = auth2.residentId, phoneKey = String(auth2.phoneKey || "").replace(/\D/g, ""), resident = id ? db.prepare("SELECT id,organization_id as organizationId,name,property,room FROM residents WHERE id=?").get(id) : null;
+  if (!id && !phoneKey) return res.status(401).json({ error: "Resident sign-in is required." });
+  if (id && !resident) return res.status(404).json({ error: "Resident record was not found." });
+  const title = val(req.body?.title, 160), description = val(req.body?.description, 2000), priority = ["Low","Normal","Urgent"].includes(String(req.body?.priority)) ? String(req.body.priority) : "Normal";
+  if (title.length < 3 || description.length < 5) return res.status(400).json({ error: "Enter a request title and a short description." });
+  const registered = !resident && phoneKey ? db.prepare("SELECT name FROM resident_portal_signups WHERE phone_key=?").get(phoneKey) : null;
+  if (!resident && !registered) return res.status(404).json({ error: "No resident account was found." });
+  const requestId = uid2(), now = nowIso2();
+  db.prepare("INSERT INTO resident_portal_maintenance (id,resident_id,phone_key,organization_id,resident_name,property,room,title,description,priority,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'NEW',?,?)").run(requestId, id || "", phoneKey, resident?.organizationId || "", resident?.name || registered.name, resident?.property || "", resident?.room || "", title, description, priority, now, now);
+  res.status(201).json({ id: requestId, message: "Maintenance request sent to your property team." });
+});
 app.get("/api/resident/portal/dashboard", (req, res) => {
   const auth2 = residentPortalIdentity(req), id = auth2.residentId;
   if (residentSuspended(auth2.phoneKey)) return res.status(403).json({ error: "This resident account is suspended. Contact support." });
@@ -1795,6 +1906,26 @@ app.post("/api/auth/signup", (req, res) => {
   } catch (e) {
     res.status(e?.code?.startsWith("SQLITE_CONSTRAINT") ? 409 : 500).json({ error: e?.code?.startsWith("SQLITE_CONSTRAINT") ? "This email already has an account. Please sign in." : "Could not create owner account." });
   }
+});
+app.post("/api/auth/password-reset/request", async (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  if (!passwordResetAvailable("email")) return res.status(503).json({ error: "Owner password reset email is not configured yet. Contact Autrob Stay support." });
+  const email = val(req.body?.email, 180).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid account email address." });
+  const user = db.prepare("SELECT id,email FROM users WHERE lower(email)=? AND role='owner'").get(email);
+  if (!user) return res.json({ message: "If an owner account matches that email, password reset instructions will be sent." });
+  try { await issuePasswordReset(req, "email", user.email, "OWNER", user.id, "/password-reset"); res.json({ message: "If an owner account matches that email, password reset instructions will be sent." }); }
+  catch (error) { console.error("Owner password reset delivery failed:", error instanceof Error ? error.message : "unknown error"); res.status(502).json({ error: "Could not send reset instructions. Try again later or contact Autrob Stay support." }); }
+});
+app.post("/api/auth/password-reset/confirm", (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const token = String(req.body?.token || ""), password = String(req.body?.password || ""), confirm = String(req.body?.confirmPassword || "");
+  if (password.length < 10) return res.status(400).json({ error: "Use a password with at least 10 characters." });
+  if (password !== confirm) return res.status(400).json({ error: "The new password and confirmation do not match." });
+  const row = db.prepare("SELECT account_key as accountKey FROM password_reset_tokens WHERE token_hash=? AND account_type='OWNER' AND used_at='' AND expires_at>?").get(residentTokenHash(token), nowIso2());
+  if (!row) return res.status(400).json({ error: "This reset link is invalid or expired. Request a new link." });
+  const now = nowIso2(), update = db.transaction(() => { const result = db.prepare("UPDATE users SET password_hash=? WHERE id=? AND role='owner'").run(hash(password), row.accountKey); if (!result.changes) throw new Error("Owner account was not found."); db.prepare("UPDATE password_reset_tokens SET used_at=? WHERE account_type='OWNER' AND account_key=?").run(now, row.accountKey); });
+  try { update(); res.json({ ok: true, message: "Owner password reset successfully. Sign in with your new password." }); } catch (error) { res.status(404).json({ error: error instanceof Error ? error.message : "Owner account was not found." }); }
 });
 app.get("/api/platform/session", (req, res) => {
   const admin = platformUserFor(req);
@@ -1987,11 +2118,26 @@ app.patch("/api/platform/business-inquiries/:id", platformAuth, (req, res) => {
   if (!result.changes) return res.status(404).json({ error: "Business enquiry not found." });
   res.json({ ok: true });
 });
+app.get("/api/platform/partner-applications", platformAuth, (_req, res) => res.json({ applications: db.prepare("SELECT id,name,date_of_birth as dateOfBirth,qualification,phone_key as phone,email,address,city,state,pincode,status,admin_notes as adminNotes,reviewed_at as reviewedAt,created_at as createdAt FROM partner_applications ORDER BY CASE status WHEN 'PENDING' THEN 0 ELSE 1 END,created_at DESC LIMIT 1000").all() }));
+app.patch("/api/platform/partner-applications/:id", platformAuth, (req, res) => {
+  const status = String(req.body?.status || "").toUpperCase();
+  if (!["APPROVED","REJECTED","SUSPENDED"].includes(status)) return res.status(400).json({ error: "Choose approve, reject or suspend." });
+  const now = nowIso2(), result = db.prepare("UPDATE partner_applications SET status=?,admin_notes=?,reviewed_at=?,updated_at=? WHERE id=?").run(status, val(req.body?.adminNotes, 1000), now, now, req.params.id);
+  if (!result.changes) return res.status(404).json({ error: "Partner application was not found." });
+  res.json({ ok: true, status });
+});
+app.get("/api/platform/partner-payouts", platformAuth, (_req, res) => res.json({ partners: db.prepare("SELECT a.id,a.name,a.phone_key as phone,a.email,a.status,(SELECT COUNT(*) FROM partner_clients c WHERE c.partner_id=a.id) as clients,(SELECT COUNT(*) FROM partner_clients c WHERE c.partner_id=a.id AND c.stage='CONVERTED') as conversions FROM partner_applications a WHERE a.status='APPROVED' ORDER BY a.name").all(), payouts: db.prepare("SELECT p.id,p.partner_id as partnerId,a.name as partnerName,p.amount_paise as amountPaise,p.period,p.status,p.note,p.created_at as createdAt FROM partner_payouts p JOIN partner_applications a ON a.id=p.partner_id ORDER BY p.created_at DESC LIMIT 1000").all() }));
+app.post("/api/platform/partner-payouts", platformAuth, (req, res) => {
+  const partnerId = val(req.body?.partnerId, 100), amount = Math.round(Number(req.body?.amount) * 100), period = val(req.body?.period, 100), note = val(req.body?.note, 500), status = String(req.body?.status || "UPCOMING").toUpperCase();
+  if (!db.prepare("SELECT id FROM partner_applications WHERE id=? AND status='APPROVED'").get(partnerId)) return res.status(404).json({ error: "Approved partner was not found." });
+  if (!Number.isFinite(amount) || amount < 1 || !["UPCOMING","PAID"].includes(status)) return res.status(400).json({ error: "Enter a valid payout amount and status." });
+  const id = uid2(), now = nowIso2(); db.prepare("INSERT INTO partner_payouts (id,partner_id,amount_paise,period,status,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").run(id, partnerId, amount, period, status, note, now, now); res.status(201).json({ id });
+});
 app.get("/api/platform/overview", platformAuth, (_req, res) => {
-  const totals = db.prepare(`SELECT COUNT(*) as owners,SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) as active,SUM(CASE WHEN status='Trial' THEN 1 ELSE 0 END) as trials,SUM(CASE WHEN status='Past due' THEN 1 ELSE 0 END) as pastDue,(SELECT COALESCE(SUM(amount),0) FROM saas_payments WHERE status='Paid' AND organization_id<>'org-nivasbook-demo') as collected,(SELECT COUNT(*) FROM saas_payments WHERE status='Pending' AND organization_id<>'org-nivasbook-demo') as awaiting FROM organizations WHERE id<>'org-nivasbook-demo'`).get();
+  const totals = db.prepare(`SELECT COUNT(*) as owners,COALESCE(SUM(CASE WHEN o.status='Active' THEN 1 ELSE 0 END),0) as active,COALESCE(SUM(CASE WHEN o.status='Trial' THEN 1 ELSE 0 END),0) as trials,COALESCE(SUM(CASE WHEN o.status='Past due' THEN 1 ELSE 0 END),0) as pastDue,(SELECT COALESCE(SUM(amount),0) FROM saas_payments WHERE status='Paid' AND organization_id NOT IN ('org-nivasbook-demo','demo-network-samples')) as collected,(SELECT COUNT(*) FROM saas_payments WHERE status='Pending' AND organization_id NOT IN ('org-nivasbook-demo','demo-network-samples')) as awaiting FROM organizations o JOIN users u ON u.id=o.owner_user_id AND u.role='owner' WHERE o.id NOT IN ('org-nivasbook-demo','demo-network-samples')`).get();
   totals.collected += Number(db.prepare("SELECT COALESCE(SUM(amount_paise),0)/100.0 as total FROM commercial_payments WHERE payment_status='Paid'").get().total || 0);
   totals.awaiting += Number(db.prepare("SELECT COUNT(*) as total FROM commercial_subscriptions WHERE subscription_status='PENDING'").get().total || 0);
-  const recent = db.prepare(`SELECT p.id,p.organization_id as organizationId,o.name as pgName,p.amount,p.status,p.method,p.reference,p.period_start as periodStart,p.period_end as periodEnd,p.paid_at as paidAt,p.created_at as createdAt FROM saas_payments p JOIN organizations o ON o.id=p.organization_id WHERE p.organization_id<>'org-nivasbook-demo' ORDER BY p.created_at DESC LIMIT 8`).all();
+  const recent = db.prepare(`SELECT p.id,p.organization_id as organizationId,o.name as pgName,p.amount,p.status,p.method,p.reference,p.period_start as periodStart,p.period_end as periodEnd,p.paid_at as paidAt,p.created_at as createdAt FROM saas_payments p JOIN organizations o ON o.id=p.organization_id JOIN users u ON u.id=o.owner_user_id AND u.role='owner' WHERE p.organization_id NOT IN ('org-nivasbook-demo','demo-network-samples') ORDER BY p.created_at DESC LIMIT 8`).all();
   res.json({ totals, recent });
 });
 app.get("/api/platform/owners", platformAuth, (_req, res) => {
@@ -2015,6 +2161,35 @@ app.patch("/api/platform/residents/:phone/suspension", platformAuth, (req, res) 
   if (phone.length < 10 || typeof req.body?.suspended !== "boolean") return res.status(400).json({ error: "Choose a valid resident and suspension state." });
   db.prepare("INSERT INTO resident_portal_suspensions (phone_key,suspended,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(phone_key) DO UPDATE SET suspended=excluded.suspended,updated_at=excluded.updated_at,updated_by=excluded.updated_by").run(phone, req.body.suspended ? 1 : 0, nowIso2(), platformUserFor(req).id);
   res.json({ ok: true });
+});
+app.patch("/api/platform/residents/:phone/password", platformAuth, (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const phone = String(req.params.phone || "").replace(/\D/g, ""), password = String(req.body?.password || "");
+  if (phone.length < 10) return res.status(400).json({ error: "Choose a valid resident account." });
+  if (password.length < 8) return res.status(400).json({ error: "Set a temporary password of at least 8 characters." });
+
+  const matchesPhone = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    return digits === phone || (digits.length >= 10 && phone.length >= 10 && digits.slice(-10) === phone.slice(-10));
+  };
+  const residentRows = db.prepare("SELECT id,phone FROM residents WHERE phone<>''").all().filter((row) => matchesPhone(row.phone));
+  const signupRows = db.prepare("SELECT phone_key as phone FROM resident_portal_signups").all().filter((row) => matchesPhone(row.phone));
+  const enquiryRows = db.prepare("SELECT phone FROM resident_stay_requirements").all().filter((row) => matchesPhone(row.phone));
+  const enquiryAccounts = db.prepare("SELECT phone_key as phone FROM resident_enquiry_accounts").all().filter((row) => matchesPhone(row.phone));
+  if (!residentRows.length && !signupRows.length && !enquiryRows.length && !enquiryAccounts.length) return res.status(404).json({ error: "Resident account not found." });
+
+  const passwordHash = hash(password), now = nowIso2();
+  const update = db.transaction(() => {
+    for (const row of residentRows) db.prepare("UPDATE residents SET portal_password_hash=? WHERE id=?").run(passwordHash, row.id);
+    for (const row of signupRows) db.prepare("UPDATE resident_portal_signups SET password_hash=?,updated_at=? WHERE phone_key=?").run(passwordHash, now, row.phone);
+    for (const row of enquiryAccounts) db.prepare("UPDATE resident_enquiry_accounts SET password_hash=?,updated_at=? WHERE phone_key=?").run(passwordHash, now, row.phone);
+    if (!signupRows.length && (enquiryRows.length || enquiryAccounts.length)) {
+      const key = String(enquiryAccounts[0]?.phone || enquiryRows[0]?.phone || phone).replace(/\D/g, "");
+      db.prepare("INSERT INTO resident_enquiry_accounts (phone_key,password_hash,created_at,updated_at) VALUES (?,?,?,?) ON CONFLICT(phone_key) DO UPDATE SET password_hash=excluded.password_hash,updated_at=excluded.updated_at").run(key, passwordHash, now, now);
+    }
+  });
+  update();
+  res.json({ ok: true, updatedResidentProfiles: residentRows.length, message: "Resident temporary password updated." });
 });
 app.post("/api/platform/owners", platformAuth, (req, res) => {
   const b = req.body || {}, ownerName = val(b.ownerName, 100), pgName = val(b.pgName, 180), email = val(b.email, 180).toLowerCase(), password = String(b.password || ""), plan = val(b.plan, 30) || "Trial";
@@ -3154,6 +3329,35 @@ app.post("/api/public/stay-requirements", (req, res) => {
   db.prepare("INSERT INTO resident_stay_requirements (id,name,phone,email,area,budget,profession,gender,preference,move_in,duration,notes,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'OPEN',?,?)").run(id, name, phone, val(b.email, 180).toLowerCase(), area, budget, val(b.profession, 120), val(b.gender, 30), val(b.preference, 60), val(b.moveIn, 10), val(b.duration, 80), val(b.notes, 1e3), created, created);
   res.status(201).json({ id, message: "Your stay requirement has been shared with PG and hostel owners in your area. Sign in at /resident/login using your phone number as both username and initial password to see owner responses." });
 });
+app.post("/api/public/partner-applications", (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const b = req.body || {}, name = val(b.name, 120), dob = val(b.dateOfBirth, 10), qualification = val(b.qualification, 160), phone = String(b.phone || "").replace(/\D/g, "").slice(-10), email = val(b.email, 180).toLowerCase(), address = val(b.address, 500), city = val(b.city, 100), state = val(b.state, 100), pincode = val(b.pincode, 12);
+  if (name.length < 2 || !/^\d{4}-\d{2}-\d{2}$/.test(dob) || !qualification || phone.length !== 10 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || address.length < 5 || !city || !state || pincode.length < 4) return res.status(400).json({ error: "Complete every field with valid contact details." });
+  const existing = db.prepare("SELECT status FROM partner_applications WHERE phone_key=?").get(phone);
+  if (existing) return res.status(409).json({ error: existing.status === "PENDING" ? "An application with this phone number is already awaiting review." : "An application with this phone number already exists. Contact support for help." });
+  const id = uid2(), now = nowIso2();
+  db.prepare("INSERT INTO partner_applications (id,name,date_of_birth,qualification,phone_key,email,address,city,state,pincode,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'PENDING',?,?)").run(id, name, dob, qualification, phone, email, address, city, state, pincode, hash(phone), now, now);
+  res.status(201).json({ message: "Application submitted for review. We’ll notify you after the platform team reviews it.", applicationId: id });
+});
+app.post("/api/partner/login", (req, res) => {
+  if (desktopApp) return res.status(404).json({ error: "Route not found." });
+  const identifier = String(req.body?.identifier || "").trim(), phone = identifier.replace(/\D/g, "").slice(-10), password = String(req.body?.password || "");
+  const row = db.prepare("SELECT * FROM partner_applications WHERE phone_key=? OR lower(email)=? ORDER BY CASE WHEN phone_key=? THEN 0 ELSE 1 END LIMIT 1").get(phone, identifier.toLowerCase(), phone);
+  if (!row || !bcrypt2.compareSync(password, row.password_hash)) return res.status(401).json({ error: "Partner phone/email or password is incorrect." });
+  if (row.status !== "APPROVED") return res.status(403).json({ error: row.status === "SUSPENDED" ? "Partner access is suspended. Contact the platform team." : row.status === "REJECTED" ? "This application was not approved. Contact the platform team for details." : "Your application is awaiting admin approval." });
+  const token = crypto2.randomBytes(32).toString("base64url"), now = nowIso2(), expires = new Date(Date.now() + 7 * 864e5).toISOString();
+  db.prepare("INSERT INTO partner_portal_tokens (token_hash,partner_id,expires_at,created_at) VALUES (?,?,?,?)").run(residentTokenHash(token), row.id, expires, now);
+  res.json({ accessToken: token, partner: { id: row.id, name: row.name, email: row.email, phone: row.phone_key } });
+});
+app.get("/api/partner/session", partnerAuth, (req, res) => { const partner = db.prepare("SELECT id,name,email,phone_key as phone,status,date_of_birth as dateOfBirth,qualification,address,city,state,pincode FROM partner_applications WHERE id=?").get(req.partnerId); res.json({ partner }); });
+app.post("/api/partner/logout", (req, res) => { const token = String(req.get("authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1] || ""; if (token) db.prepare("DELETE FROM partner_portal_tokens WHERE token_hash=?").run(residentTokenHash(token)); res.json({ ok: true }); });
+app.get("/api/partner/dashboard", partnerAuth, (req, res) => {
+  const id = req.partnerId, partner = db.prepare("SELECT id,name,email,phone_key as phone,status,date_of_birth as dateOfBirth,qualification,address,city,state,pincode FROM partner_applications WHERE id=?").get(id), clients = db.prepare("SELECT id,name,phone,email,business_name as businessName,area,stage,notes,created_at as createdAt,updated_at as updatedAt FROM partner_clients WHERE partner_id=? ORDER BY updated_at DESC").all(id), payouts = db.prepare("SELECT id,amount_paise as amountPaise,period,status,note,created_at as createdAt FROM partner_payouts WHERE partner_id=? ORDER BY created_at DESC").all(id);
+  res.json({ partner, clients, payouts: payouts.map((p) => ({ ...p, amount: Number(p.amountPaise || 0) / 100 })), metrics: { clients: clients.length, converted: clients.filter((c) => c.stage === "CONVERTED").length, totalPayout: payouts.filter((p) => p.status === "PAID").reduce((n, p) => n + Number(p.amountPaise || 0), 0) / 100, upcomingPayout: payouts.filter((p) => p.status === "UPCOMING").reduce((n, p) => n + Number(p.amountPaise || 0), 0) / 100 } });
+});
+app.post("/api/partner/clients", partnerAuth, (req, res) => { const b = req.body || {}, name = val(b.name, 120), phone = val(b.phone, 30), email = val(b.email, 180).toLowerCase(), business = val(b.businessName, 180), area = val(b.area, 180), notes = val(b.notes, 1200); if (name.length < 2) return res.status(400).json({ error: "Enter the client’s name." }); const id = uid2(), now = nowIso2(); db.prepare("INSERT INTO partner_clients (id,partner_id,name,phone,email,business_name,area,stage,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'POTENTIAL',?,?,?)").run(id, req.partnerId, name, phone, email, business, area, notes, now, now); res.status(201).json({ id }); });
+app.patch("/api/partner/clients/:id", partnerAuth, (req, res) => { const b = req.body || {}, stage = String(b.stage || "").toUpperCase(), current = db.prepare("SELECT id FROM partner_clients WHERE id=? AND partner_id=?").get(req.params.id, req.partnerId); if (!current) return res.status(404).json({ error: "Client was not found." }); if (!["POTENTIAL","CONTACTED","FOLLOW_UP","CONVERTED"].includes(stage)) return res.status(400).json({ error: "Choose a valid pipeline stage." }); db.prepare("UPDATE partner_clients SET stage=?,notes=?,updated_at=? WHERE id=? AND partner_id=?").run(stage, val(b.notes, 1200), nowIso2(), req.params.id, req.partnerId); res.json({ ok: true }); });
+app.post("/api/partner/password", partnerAuth, (req, res) => { const current = String(req.body?.currentPassword || ""), next = String(req.body?.newPassword || ""), row = db.prepare("SELECT password_hash as passwordHash FROM partner_applications WHERE id=?").get(req.partnerId); if (!row || !bcrypt2.compareSync(current, row.passwordHash)) return res.status(401).json({ error: "Current password is incorrect." }); if (next.length < 8) return res.status(400).json({ error: "Use a password with at least 8 characters." }); db.prepare("UPDATE partner_applications SET password_hash=?,updated_at=? WHERE id=?").run(hash(next), nowIso2(), req.partnerId); res.json({ ok: true }); });
 app.post("/api/public/business-inquiries", (req, res) => {
   const ip = String(req.ip || req.socket.remoteAddress || "unknown"), now = Date.now(), bucket = publicLeadWindows.get(ip);
   if (bucket && now - bucket.start < 6e4 && bucket.count >= 8) return res.status(429).json({ error: "Too many requests. Please try again in a minute." });

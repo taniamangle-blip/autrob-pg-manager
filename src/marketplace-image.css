@@ -1,0 +1,6 @@
+.marketplace-ai-photo{position:relative;overflow:hidden;isolation:isolate;background:#edf3ee;min-height:160px}
+.marketplace-ai-photo>img{position:absolute!important;width:420%!important;height:420%!important;max-width:none!important;object-fit:fill!important;display:block!important}
+.marketplace-ai-label{position:absolute;right:9px;bottom:9px;padding:4px 7px;border-radius:20px;background:#15291f9c;color:#fff;font-size:9px;font-weight:750;letter-spacing:.2px;opacity:0;transition:opacity .2s}
+.marketplace-ai-photo:hover .marketplace-ai-label{opacity:1}
+.marketplace-image-empty{display:grid;place-items:center;background:#eff4f1;min-height:160px}
+.net-market-card>.marketplace-ai-photo{height:145px;min-height:0;flex:none}.na-market-card>.marketplace-ai-photo{height:190px;min-height:0;flex:none}
